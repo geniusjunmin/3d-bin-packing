@@ -20,10 +20,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 9.0.x
 
@@ -51,9 +51,10 @@ jobs:
       SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
       APP_NAME: box-packing-app
       DOCKER_NETWORK: box-packing-network
+      DEPLOY_ARCHIVE: ${{ runner.temp }}/3d-bin-packing-${{ github.sha }}.tar.gz
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate deployment secrets
         shell: bash
@@ -83,7 +84,7 @@ jobs:
             --exclude='obj' \
             --exclude='tests/*/bin' \
             --exclude='tests/*/obj' \
-            -czf "deployment-${GITHUB_SHA}.tar.gz" .
+            -czf "$DEPLOY_ARCHIVE" .
 
       - name: Upload release to server
         shell: bash
@@ -91,7 +92,7 @@ jobs:
           scp \
             -i "$HOME/.ssh/deploy_key" \
             -P "$SERVER_PORT" \
-            "deployment-${GITHUB_SHA}.tar.gz" \
+            "$DEPLOY_ARCHIVE" \
             "${SERVER_USER}@${SERVER_HOST}:/tmp/3d-bin-packing-${GITHUB_SHA}.tar.gz"
 
       - name: Build and start container
