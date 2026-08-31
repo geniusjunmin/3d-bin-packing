@@ -1,0 +1,12 @@
+.git
+.github
+.vs
+.idea
+bin
+obj
+tests
+*.user
+*.suo
+README.md
+BinPacking.Web.http
+BinPacking.sln

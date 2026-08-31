@@ -35,3 +35,35 @@ dotnet test BinPacking.sln
 后端统一使用 `X = Length`、`Y = Width`、`Z = Height`。Three.js 渲染时仅做坐标轴映射：后端 Z 映射为屏幕竖直轴，几何尺寸和位置不重新计算。
 
 > MVP 的箱型与商品 CRUD 数据存于进程内存，应用重启后恢复内置示例数据。若用于生产，可在不改 API 和算法的前提下将 `CatalogStore` 替换为 EF Core 持久化实现。
+
+## CI/CD 与服务器部署
+
+推送到 `main` 后，GitHub Actions 会依次执行 Release 编译、测试、SSH 上传、服务器 Docker 构建和健康检查。生产容器配置如下：
+
+- 容器名：`box-packing-app`
+- 容器端口：`8080`
+- Docker 网络：`box-packing-network`
+- 重启策略：`unless-stopped`
+- 健康检查：`/health`
+- 服务器发布目录：`$HOME/apps/3d-bin-packing/releases/<commit>`
+
+仓库需要以下 Repository Secrets：
+
+- `SERVER_HOST`
+- `SERVER_PORT`
+- `SERVER_SSH_KEY`
+- `SERVER_USER`
+
+首次部署后，将 Nginx 容器接入应用网络：
+
+```bash
+docker network connect box-packing-network nignx
+```
+
+之后在 Nginx 中将 `box.junhoo.com` 反向代理到：
+
+```text
+http://box-packing-app:8080
+```
+
+部署失败时，工作流会删除失败的新容器并恢复上一版容器。也可以在 GitHub Actions 页面使用 `workflow_dispatch` 手动部署。

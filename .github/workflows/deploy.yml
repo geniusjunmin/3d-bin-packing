@@ -1,0 +1,196 @@
+name: Test and deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore BinPacking.sln
+
+      - name: Build
+        run: dotnet build BinPacking.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test BinPacking.sln --configuration Release --no-build
+
+  deploy:
+    name: Deploy to production server
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://box.junhoo.com
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_PORT: ${{ secrets.SERVER_PORT }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      APP_NAME: box-packing-app
+      DOCKER_NETWORK: box-packing-network
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          for name in SERVER_HOST SERVER_PORT SERVER_USER SERVER_SSH_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "Required secret $name is empty."
+              exit 1
+            fi
+          done
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SERVER_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Package application source
+        shell: bash
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='bin' \
+            --exclude='obj' \
+            --exclude='tests/*/bin' \
+            --exclude='tests/*/obj' \
+            -czf "deployment-${GITHUB_SHA}.tar.gz" .
+
+      - name: Upload release to server
+        shell: bash
+        run: |
+          scp \
+            -i "$HOME/.ssh/deploy_key" \
+            -P "$SERVER_PORT" \
+            "deployment-${GITHUB_SHA}.tar.gz" \
+            "${SERVER_USER}@${SERVER_HOST}:/tmp/3d-bin-packing-${GITHUB_SHA}.tar.gz"
+
+      - name: Build and start container
+        shell: bash
+        run: |
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$SERVER_PORT" \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            bash -s -- "$GITHUB_SHA" "$APP_NAME" "$DOCKER_NETWORK" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          release_sha="$1"
+          app_name="$2"
+          network_name="$3"
+          app_root="$HOME/apps/3d-bin-packing"
+          release_dir="$app_root/releases/$release_sha"
+          archive="/tmp/3d-bin-packing-$release_sha.tar.gz"
+          image_name="$app_name:$release_sha"
+          rollback_name="$app_name-rollback"
+          had_previous=false
+
+          mkdir -p "$release_dir"
+          tar -xzf "$archive" -C "$release_dir"
+          rm -f "$archive"
+          cd "$release_dir"
+
+          docker build --pull --tag "$image_name" .
+          docker network inspect "$network_name" >/dev/null 2>&1 \
+            || docker network create "$network_name"
+
+          if docker container inspect "$rollback_name" >/dev/null 2>&1; then
+            docker rm --force "$rollback_name"
+          fi
+
+          if docker container inspect "$app_name" >/dev/null 2>&1; then
+            had_previous=true
+            docker stop "$app_name"
+            docker rename "$app_name" "$rollback_name"
+          fi
+
+          rollback() {
+            echo "Deployment failed; restoring the previous container."
+            docker rm --force "$app_name" >/dev/null 2>&1 || true
+            if [ "$had_previous" = true ] \
+              && docker container inspect "$rollback_name" >/dev/null 2>&1; then
+              docker rename "$rollback_name" "$app_name"
+              docker start "$app_name"
+            fi
+          }
+          trap rollback ERR
+
+          docker run --detach \
+            --name "$app_name" \
+            --network "$network_name" \
+            --restart unless-stopped \
+            --env ASPNETCORE_ENVIRONMENT=Production \
+            --env ASPNETCORE_HTTP_PORTS=8080 \
+            --label "com.packlab.commit=$release_sha" \
+            "$image_name"
+
+          health="starting"
+          for attempt in $(seq 1 30); do
+            health=$(docker inspect --format '{{.State.Health.Status}}' "$app_name")
+            if [ "$health" = "healthy" ]; then
+              break
+            fi
+            if [ "$health" = "unhealthy" ]; then
+              docker logs --tail 100 "$app_name"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [ "$health" != "healthy" ]; then
+            docker logs --tail 100 "$app_name"
+            echo "Container did not become healthy before timeout."
+            exit 1
+          fi
+
+          trap - ERR
+          if docker container inspect "$rollback_name" >/dev/null 2>&1; then
+            docker rm --force "$rollback_name"
+          fi
+          ln -sfn "$release_dir" "$app_root/current"
+
+          echo "Deployment completed."
+          docker ps --filter "name=^/${app_name}$" \
+            --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Networks}}'
+          REMOTE_SCRIPT
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## Production deployment"
+            echo ""
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Container: \`$APP_NAME\`"
+            echo "- Docker network: \`$DOCKER_NETWORK\`"
+            echo "- Internal endpoint: \`http://$APP_NAME:8080\`"
+          } >> "$GITHUB_STEP_SUMMARY"
