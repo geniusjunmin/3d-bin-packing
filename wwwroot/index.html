@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="三维自动装箱与箱型选择系统">
+  <title>PackLab · 3D 自动装箱</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#">
+      <span class="brand-mark"><i></i><i></i><i></i></span>
+      <span><strong>PACKLAB</strong><small>3D PACKING STUDIO</small></span>
+    </a>
+    <div class="topbar-meta">
+      <span class="status-dot"></span>
+      <span>Extreme Point Engine</span>
+      <span class="version">MVP · .NET 9</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">SMART FULFILLMENT / 智能履约</p>
+        <h1>让每一寸箱内空间<br><em>清晰可见。</em></h1>
+        <p class="hero-copy">基于实际三维尺寸、6 向旋转与碰撞检测，自动选择箱型并生成可验证的多箱装载方案。</p>
+      </div>
+      <div class="hero-diagram" aria-hidden="true">
+        <div class="wire-box"><b></b><b></b><b></b><span>3D</span></div>
+        <div class="axis x">X · LENGTH</div>
+        <div class="axis y">Y · WIDTH</div>
+        <div class="axis z">Z · HEIGHT</div>
+      </div>
+    </section>
+
+    <section class="workspace-grid">
+      <article class="panel catalog-panel">
+        <div class="panel-heading">
+          <div><span class="step">01</span><h2>箱型管理</h2></div>
+          <button class="text-button" id="new-box">＋ 新建</button>
+        </div>
+        <form id="box-form" class="editor-form hidden">
+          <input type="hidden" id="box-id">
+          <label class="wide">箱型名称<input id="box-name" maxlength="80" required placeholder="例如：Small Box"></label>
+          <label>长度 mm<input id="box-length" type="number" min="1" required></label>
+          <label>宽度 mm<input id="box-width" type="number" min="1" required></label>
+          <label>高度 mm<input id="box-height" type="number" min="1" required></label>
+          <label>承重 kg<input id="box-weight" type="number" min="0.001" step="0.001" placeholder="可选"></label>
+          <label>成本 ¥<input id="box-cost" type="number" min="0" step="0.01" placeholder="可选"></label>
+          <div class="form-actions wide"><button class="btn primary" type="submit">保存箱型</button><button class="btn ghost" type="button" data-cancel="box">取消</button></div>
+        </form>
+        <div id="box-list" class="catalog-list loading-block">正在读取箱型…</div>
+      </article>
+
+      <article class="panel catalog-panel">
+        <div class="panel-heading">
+          <div><span class="step">02</span><h2>商品管理</h2></div>
+          <button class="text-button" id="new-item">＋ 新建</button>
+        </div>
+        <form id="item-form" class="editor-form hidden">
+          <input type="hidden" id="item-id">
+          <label class="wide">商品名称<input id="item-name" maxlength="80" required placeholder="例如：Coffee Maker"></label>
+          <label>长度 mm<input id="item-length" type="number" min="1" required></label>
+          <label>宽度 mm<input id="item-width" type="number" min="1" required></label>
+          <label>高度 mm<input id="item-height" type="number" min="1" required></label>
+          <label>重量 kg<input id="item-weight" type="number" min="0.001" step="0.001" placeholder="可选"></label>
+          <label>默认数量<input id="item-quantity" type="number" min="0" max="10000" value="1" required></label>
+          <label class="check wide"><input id="item-rotation" type="checkbox" checked><span>允许 6 向旋转</span></label>
+          <div class="form-actions wide"><button class="btn primary" type="submit">保存商品</button><button class="btn ghost" type="button" data-cancel="item">取消</button></div>
+        </form>
+        <div id="item-list" class="catalog-list loading-block">正在读取商品…</div>
+      </article>
+
+      <article class="panel order-panel">
+        <div class="panel-heading">
+          <div><span class="step">03</span><h2>客户订单</h2></div>
+          <span class="order-count" id="order-count">0 件</span>
+        </div>
+        <p class="panel-note">调整每种商品数量；数量为 0 的商品不会进入订单。</p>
+        <div id="order-lines" class="order-lines loading-block">正在生成订单表…</div>
+        <div class="order-actions">
+          <button class="btn random" id="random-test"><span>✦</span> RANDOM TEST</button>
+          <button class="btn primary pack-button" id="auto-pack">AUTO PACK <span>→</span></button>
+        </div>
+      </article>
+    </section>
+
+    <section id="empty-state" class="empty-state">
+      <span class="empty-icon">⬡</span>
+      <h2>装箱结果将在这里展开</h2>
+      <p>选择商品数量并运行 Auto Pack，或用 Random Test 快速生成测试订单。</p>
+    </section>
+
+    <section id="result-section" class="result-section hidden">
+      <div class="result-title-row">
+        <div>
+          <p class="eyebrow">PACKING RESULT / 装箱结果</p>
+          <h2>方案已计算完成</h2>
+        </div>
+        <div class="result-badge"><span>✓</span> ALL ITEMS PACKED</div>
+      </div>
+
+      <div id="summary-cards" class="summary-cards"></div>
+
+      <div class="visual-layout">
+        <article class="viewer-panel">
+          <div class="viewer-head">
+            <div id="box-tabs" class="box-tabs"></div>
+            <div class="viewer-actions">
+              <button id="toggle-shell" title="显示/隐藏箱体">箱体</button>
+              <button id="reset-camera" title="重置视角">重置视角</button>
+            </div>
+          </div>
+          <div id="viewer" class="viewer">
+            <div class="viewer-hint">拖拽旋转 · 滚轮缩放 · 右键平移 · 点击商品查看</div>
+          </div>
+          <div class="animation-bar">
+            <button id="replay" class="icon-button" title="重新播放">↺</button>
+            <button id="play-pause" class="play-button" title="播放/暂停">▶</button>
+            <div class="timeline"><i id="timeline-progress"></i></div>
+            <span id="animation-label">准备播放</span>
+            <button id="show-final" class="text-button">跳到最终状态</button>
+          </div>
+        </article>
+
+        <aside class="inspector-panel">
+          <div class="inspector-title"><span>ITEM INSPECTOR</span><small>点击 3D 商品</small></div>
+          <div id="item-inspector" class="inspector-empty">
+            <div class="cursor-icon">⌖</div>
+            <p>选择箱内商品以查看坐标、最终尺寸与旋转方式。</p>
+          </div>
+          <div class="legend-title">商品图例</div>
+          <div id="item-legend" class="item-legend"></div>
+        </aside>
+      </div>
+
+      <div class="detail-heading">
+        <div><span class="step">04</span><h2>逐箱明细</h2></div>
+        <button id="export-json" class="btn ghost">导出 JSON</button>
+      </div>
+      <div id="box-details" class="box-details"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}
+  </script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

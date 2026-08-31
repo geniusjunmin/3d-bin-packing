@@ -1,0 +1,80 @@
+namespace BinPacking.Web.Models;
+
+public readonly record struct Point3(int X, int Y, int Z);
+
+public readonly record struct OrientedSize(int Length, int Width, int Height, string Rotation)
+{
+    public long Volume => (long)Length * Width * Height;
+}
+
+public sealed record PackingItemUnit(
+    Guid InstanceId,
+    Guid ItemTypeId,
+    string Name,
+    int Sequence,
+    int Length,
+    int Width,
+    int Height,
+    double WeightKg,
+    bool AllowRotation)
+{
+    public long Volume => (long)Length * Width * Height;
+}
+
+public sealed record PackedItem
+{
+    public required Guid InstanceId { get; init; }
+    public required Guid ItemTypeId { get; init; }
+    public required string Name { get; init; }
+    public int Sequence { get; init; }
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Z { get; init; }
+    public int Length { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int OriginalLength { get; init; }
+    public int OriginalWidth { get; init; }
+    public int OriginalHeight { get; init; }
+    public required string Rotation { get; init; }
+    public double WeightKg { get; init; }
+    public long Volume => (long)Length * Width * Height;
+}
+
+public sealed record PackingAttempt(
+    BoxType Box,
+    IReadOnlyList<PackedItem> PackedItems,
+    IReadOnlyList<PackingItemUnit> UnpackedItems)
+{
+    public long PackedVolume => PackedItems.Sum(item => item.Volume);
+    public double PackedWeightKg => PackedItems.Sum(item => item.WeightKg);
+}
+
+public sealed record PackedBox
+{
+    public int Number { get; init; }
+    public required BoxType Box { get; init; }
+    public required IReadOnlyList<PackedItem> Items { get; init; }
+    public double UtilizationPercent { get; init; }
+    public double TotalWeightKg { get; init; }
+}
+
+public sealed record PackingSummary
+{
+    public int TotalItemCount { get; init; }
+    public int TotalBoxCount { get; init; }
+    public long TotalItemVolumeMm3 { get; init; }
+    public long TotalBoxVolumeMm3 { get; init; }
+    public double UtilizationPercent { get; init; }
+    public decimal TotalCost { get; init; }
+    public required IReadOnlyDictionary<string, int> BoxesByType { get; init; }
+}
+
+public sealed record PackingResult
+{
+    public bool Success { get; init; }
+    public string? Error { get; init; }
+    public required PackingSummary Summary { get; init; }
+    public required IReadOnlyList<PackedBox> Boxes { get; init; }
+    public required IReadOnlyList<string> UnpackedItems { get; init; }
+}
