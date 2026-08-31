@@ -51,7 +51,6 @@ jobs:
       SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
       APP_NAME: box-packing-app
       DOCKER_NETWORK: box-packing-network
-      DEPLOY_ARCHIVE: ${{ runner.temp }}/3d-bin-packing-${{ github.sha }}.tar.gz
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -78,13 +77,15 @@ jobs:
       - name: Package application source
         shell: bash
         run: |
+          archive="$RUNNER_TEMP/3d-bin-packing-$GITHUB_SHA.tar.gz"
+          echo "DEPLOY_ARCHIVE=$archive" >> "$GITHUB_ENV"
           tar \
             --exclude='.git' \
             --exclude='bin' \
             --exclude='obj' \
             --exclude='tests/*/bin' \
             --exclude='tests/*/obj' \
-            -czf "$DEPLOY_ARCHIVE" .
+            -czf "$archive" .
 
       - name: Upload release to server
         shell: bash
