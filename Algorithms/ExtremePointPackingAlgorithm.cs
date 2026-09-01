@@ -18,15 +18,21 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
     public PackingAttempt Pack(BoxType box, IReadOnlyList<PackingItemUnit> items)
     {
         var orderings = BuildOrderings(items);
-        var attempts = orderings
-            .Select(ordering => PackOrdered(box, ordering, PlacementPreference.LowestTop))
-            .Concat(orderings.Take(7)
-                .Select(ordering => PackOrdered(box, ordering, PlacementPreference.CompactEnvelope)))
-            .Concat(orderings.Take(7)
-                .Select(ordering => PackOrdered(box, ordering, PlacementPreference.MaximumContact)))
-            .Concat(Enumerable.Range(1, 5)
-                .Select(interval => PackAdaptive(box, items, interval, false, PlacementPreference.LowestTop)))
-            .Append(PackAdaptive(box, items, 3, true, PlacementPreference.MaximumContact));
+        var volumeRatio = items.Sum(item => item.Volume) / (double)box.Volume;
+        var useDeepSearch = items.Count >= 8 && volumeRatio is >= 0.55 and <= 1.25;
+        var attempts = useDeepSearch
+            ? orderings
+                .Select(ordering => PackOrdered(box, ordering, PlacementPreference.LowestTop))
+                .Concat(orderings.Take(7)
+                    .Select(ordering => PackOrdered(box, ordering, PlacementPreference.CompactEnvelope)))
+                .Concat(orderings.Take(7)
+                    .Select(ordering => PackOrdered(box, ordering, PlacementPreference.MaximumContact)))
+                .Concat(Enumerable.Range(1, 5)
+                    .Select(interval => PackAdaptive(box, items, interval, false, PlacementPreference.LowestTop)))
+                .Append(PackAdaptive(box, items, 3, true, PlacementPreference.MaximumContact))
+            : orderings.Take(7)
+                .Select(ordering => PackOrdered(box, ordering, PlacementPreference.LowestTop))
+                .Append(PackAdaptive(box, items, 3, false, PlacementPreference.MaximumContact));
         return attempts
             .OrderByDescending(attempt => attempt.PackedVolume)
             .ThenByDescending(attempt => attempt.PackedItems.Count)
