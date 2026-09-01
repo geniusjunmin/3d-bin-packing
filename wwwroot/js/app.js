@@ -8,6 +8,7 @@ const state = {
   result: null,
   activeBox: 0,
   shellVisible: true,
+  labelsVisible: true,
   fontScale: 1
 };
 
@@ -57,6 +58,7 @@ function bindEvents() {
   byId('auto-pack').addEventListener('click', autoPack);
   byId('random-test').addEventListener('click', randomTest);
   byId('toggle-shell').addEventListener('click', toggleShell);
+  byId('toggle-labels').addEventListener('click', toggleLabels);
   byId('reset-camera').addEventListener('click', resetCamera);
   byId('replay').addEventListener('click', replayAnimation);
   byId('play-pause').addEventListener('click', toggleAnimation);
@@ -495,6 +497,7 @@ function makeLabel(text, itemScale) {
   sprite.userData.baseWidth = width;
   sprite.scale.set(width * state.fontScale, width * state.fontScale * .21875, 1);
   sprite.position.set(0, 0, 0);
+  sprite.visible = state.labelsVisible;
   sprite.renderOrder = 4;
   return sprite;
 }
@@ -534,7 +537,19 @@ function inspectFromPointer(event) {
 function toggleShell() {
   state.shellVisible = !state.shellVisible;
   if (shellGroup) shellGroup.visible = state.shellVisible;
-  byId('toggle-shell').classList.toggle('active', state.shellVisible);
+  const button = byId('toggle-shell');
+  button.classList.toggle('active', state.shellVisible);
+  button.setAttribute('aria-pressed', String(state.shellVisible));
+}
+
+function toggleLabels() {
+  state.labelsVisible = !state.labelsVisible;
+  itemMeshes.forEach(mesh => mesh.children
+    .filter(child => child.isSprite)
+    .forEach(sprite => { sprite.visible = state.labelsVisible; }));
+  const button = byId('toggle-labels');
+  button.classList.toggle('active', state.labelsVisible);
+  button.setAttribute('aria-pressed', String(state.labelsVisible));
 }
 
 function resetCamera() {
