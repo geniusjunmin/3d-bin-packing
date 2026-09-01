@@ -21,7 +21,7 @@ public sealed class BoxSelectionService(IPackingAlgorithm algorithm, CatalogStor
                 units.Add(new PackingItemUnit(
                     Guid.NewGuid(), item.Id, item.Name, sequence,
                     item.Length, item.Width, item.Height,
-                    item.WeightKg ?? 0, item.AllowRotation));
+                    item.WeightKg ?? 0, item.AllowRotation, item.Color));
             }
         }
 

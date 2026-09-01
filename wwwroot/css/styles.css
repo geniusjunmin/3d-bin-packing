@@ -75,6 +75,7 @@ h1 em { color: var(--green); font-style: italic; }
 .catalog-card { display:grid; grid-template-columns: 46px 1fr auto; gap:14px; align-items:center; padding:17px 2px; border-bottom:1px solid #e3e5de; }
 .catalog-card:last-child { border-bottom:0; }
 .catalog-icon { width:44px; height:44px; display:grid; place-items:center; color:var(--green); border:1px solid #b7c9bc; background:#f3f7ef; font-size:1.25rem; }
+.catalog-swatch { display:block; width:14px; height:14px; background:var(--swatch-color); box-shadow:0 0 0 1px rgba(23,33,27,.14); }
 .catalog-card strong { display:block; margin-bottom:6px; font-size:1rem; line-height:1.25; }
 .catalog-card small { color:var(--muted); font:550 .75rem/1.65 ui-monospace,monospace; }
 .card-actions { display:flex; gap:3px; }
@@ -88,6 +89,7 @@ h1 em { color: var(--green); font-style: italic; }
 .editor-form label { color:#4f5b53; font-size:.75rem; font-weight:750; letter-spacing:.035em; }
 .editor-form label.wide, .editor-form .wide { grid-column:1/-1; }
 .editor-form input { width:100%; margin-top:6px; padding:10px 11px; border:1px solid #ccd2c9; background:#fff; outline:none; color:var(--ink); font-size:.875rem; }
+.editor-form .color-input { height:41px; padding:4px 6px; cursor:pointer; }
 .editor-form input:focus { border-color:var(--green); box-shadow:0 0 0 2px rgba(31,122,76,.1); }
 .editor-form .check { display:flex; align-items:center; gap:8px; }
 .editor-form .check input { width:auto; margin:0; accent-color:var(--green); }

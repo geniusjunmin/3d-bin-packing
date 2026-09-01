@@ -24,6 +24,8 @@ public sealed record BoxType
     [Range(0, 1_000_000)]
     public decimal? Cost { get; init; }
 
+    public string Color { get; init; } = "#4E8B6A";
+
     public long Volume => (long)Length * Width * Height;
 }
 
@@ -46,4 +48,7 @@ public sealed record BoxInput
 
     [Range(0, 1_000_000)]
     public decimal? Cost { get; init; }
+
+    [RegularExpression("^#[0-9A-Fa-f]{6}$", ErrorMessage = "颜色必须是 #RRGGBB 格式。")]
+    public string? Color { get; init; }
 }

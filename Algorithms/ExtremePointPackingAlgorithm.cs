@@ -70,7 +70,8 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
                 OriginalWidth = item.Width,
                 OriginalHeight = item.Height,
                 Rotation = best.Size.Rotation,
-                WeightKg = item.WeightKg
+                WeightKg = item.WeightKg,
+                Color = item.Color
             };
 
             packed.Add(placed);

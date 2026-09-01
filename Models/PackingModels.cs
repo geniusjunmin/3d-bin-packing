@@ -16,7 +16,8 @@ public sealed record PackingItemUnit(
     int Width,
     int Height,
     double WeightKg,
-    bool AllowRotation)
+    bool AllowRotation,
+    string Color)
 {
     public long Volume => (long)Length * Width * Height;
 }
@@ -38,6 +39,7 @@ public sealed record PackedItem
     public int OriginalHeight { get; init; }
     public required string Rotation { get; init; }
     public double WeightKg { get; init; }
+    public required string Color { get; init; }
     public long Volume => (long)Length * Width * Height;
 }
 

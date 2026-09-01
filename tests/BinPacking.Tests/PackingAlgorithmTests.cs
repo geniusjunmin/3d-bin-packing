@@ -96,6 +96,24 @@ public sealed class PackingAlgorithmTests
         Assert.Equal(small.Id, Assert.Single(result.Boxes).Box.Id);
     }
 
+    [Fact]
+    public void BoxSelection_PreservesConfiguredBoxAndItemColors()
+    {
+        var store = EmptyStore();
+        store.AddBox(new BoxInput { Name = "Blue Box", Length = 100, Width = 100, Height = 100, Color = "#123ABC" });
+        var item = store.AddItem(new ItemInput { Name = "Pink Cube", Length = 50, Width = 50, Height = 50, Quantity = 1, AllowRotation = true, Color = "#F06292" });
+        var service = new BoxSelectionService(_algorithm, store);
+
+        var result = service.Pack(new PackOrderRequest
+        {
+            Items = [new OrderLineRequest { ItemId = item.Id, Quantity = 1 }]
+        });
+
+        var packedBox = Assert.Single(result.Boxes);
+        Assert.Equal("#123ABC", packedBox.Box.Color);
+        Assert.Equal("#F06292", Assert.Single(packedBox.Items).Color);
+    }
+
     private static CatalogStore EmptyStore()
     {
         var store = new CatalogStore();
@@ -122,7 +140,7 @@ public sealed class PackingAlgorithmTests
         double weight = 0,
         int sequence = 1) => new(
             Guid.NewGuid(), Guid.NewGuid(), name, sequence,
-            length, width, height, weight, allowRotation);
+            length, width, height, weight, allowRotation, "#60A5FA");
 
     private static void AssertValid(BoxType box, IReadOnlyList<PackedItem> items)
     {

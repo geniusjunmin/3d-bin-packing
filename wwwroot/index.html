@@ -58,6 +58,7 @@
           <label>高度 mm<input id="box-height" type="number" min="1" required></label>
           <label>承重 kg<input id="box-weight" type="number" min="0.001" step="0.001" placeholder="可选"></label>
           <label>成本 ¥<input id="box-cost" type="number" min="0" step="0.01" placeholder="可选"></label>
+          <label>箱体颜色<input id="box-color" class="color-input" type="color" value="#4e8b6a"></label>
           <div class="form-actions wide"><button class="btn primary" type="submit">保存箱型</button><button class="btn ghost" type="button" data-cancel="box">取消</button></div>
         </form>
         <div id="box-list" class="catalog-list loading-block">正在读取箱型…</div>
@@ -76,6 +77,7 @@
           <label>高度 mm<input id="item-height" type="number" min="1" required></label>
           <label>重量 kg<input id="item-weight" type="number" min="0.001" step="0.001" placeholder="可选"></label>
           <label>默认数量<input id="item-quantity" type="number" min="0" max="10000" value="1" required></label>
+          <label>商品颜色<input id="item-color" class="color-input" type="color" value="#60a5fa"></label>
           <label class="check wide"><input id="item-rotation" type="checkbox" checked><span>允许 6 向旋转</span></label>
           <div class="form-actions wide"><button class="btn primary" type="submit">保存商品</button><button class="btn ghost" type="button" data-cancel="item">取消</button></div>
         </form>

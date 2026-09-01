@@ -11,7 +11,8 @@ const state = {
   fontScale: 1
 };
 
-const palette = ['#d8ef51', '#ff8c42', '#57c7d4', '#c084fc', '#fb7185', '#60a5fa', '#facc15', '#5ee0a0'];
+const itemPalette = ['#FF8C42', '#FB7185', '#60A5FA', '#57C7D4', '#C084FC', '#FACC15', '#5EE0A0', '#A78BFA', '#F97316', '#22C55E'];
+const boxPalette = ['#77A889', '#4E8B6A', '#2F6D50', '#4B82A8', '#7C6BB3', '#B7794B'];
 const fontScaleKey = 'packlab-font-scale';
 const $ = selector => document.querySelector(selector);
 const byId = id => document.getElementById(id);
@@ -129,16 +130,16 @@ function firstValidationError(errors) {
 function renderBoxes() {
   byId('box-list').innerHTML = state.boxes.length ? state.boxes.map(box => `
     <div class="catalog-card">
-      <span class="catalog-icon">□</span>
+      <span class="catalog-icon"><i class="catalog-swatch" style="--swatch-color:${safeColor(box.color, '#4E8B6A')}"></i></span>
       <div><strong>${escapeHtml(box.name)}</strong><small>${box.length} × ${box.width} × ${box.height} mm<br>${box.maxWeightKg ? `承重 ${box.maxWeightKg} kg` : '不限承重'} · ${box.cost != null ? `¥${box.cost.toFixed(2)}` : '未设成本'}</small></div>
       <div class="card-actions"><button data-type="box" data-action="edit" data-id="${box.id}" title="编辑">✎</button><button class="danger" data-type="box" data-action="delete" data-id="${box.id}" title="删除">×</button></div>
     </div>`).join('') : '<div class="empty-list">暂无箱型，请先新建。</div>';
 }
 
 function renderItems() {
-  byId('item-list').innerHTML = state.items.length ? state.items.map((item, index) => `
+  byId('item-list').innerHTML = state.items.length ? state.items.map(item => `
     <div class="catalog-card">
-      <span class="catalog-icon" style="color:${palette[index % palette.length]}">■</span>
+      <span class="catalog-icon"><i class="catalog-swatch" style="--swatch-color:${itemColor(item)}"></i></span>
       <div><strong>${escapeHtml(item.name)}</strong><small>${item.length} × ${item.width} × ${item.height} mm<br>${item.allowRotation ? '允许旋转' : '固定方向'} · ${item.weightKg ? `${item.weightKg} kg` : '未设重量'}</small></div>
       <div class="card-actions"><button data-type="item" data-action="edit" data-id="${item.id}" title="编辑">✎</button><button class="danger" data-type="item" data-action="delete" data-id="${item.id}" title="删除">×</button></div>
     </div>`).join('') : '<div class="empty-list">暂无商品，请先新建。</div>';
@@ -166,6 +167,7 @@ function openBoxForm(box = null) {
   byId('box-height').value = box?.height || '';
   byId('box-weight').value = box?.maxWeightKg ?? '';
   byId('box-cost').value = box?.cost ?? '';
+  byId('box-color').value = safeColor(box?.color, nextAvailableColor(state.boxes, boxPalette)).toLowerCase();
   byId('box-name').focus();
 }
 
@@ -179,6 +181,7 @@ function openItemForm(item = null) {
   byId('item-weight').value = item?.weightKg ?? '';
   byId('item-quantity').value = item?.quantity ?? 1;
   byId('item-rotation').checked = item?.allowRotation ?? true;
+  byId('item-color').value = safeColor(item?.color, nextAvailableColor(state.items, itemPalette)).toLowerCase();
   byId('item-name').focus();
 }
 
@@ -191,7 +194,8 @@ async function saveBox(event) {
     width: Number(byId('box-width').value),
     height: Number(byId('box-height').value),
     maxWeightKg: nullableNumber(byId('box-weight').value),
-    cost: nullableNumber(byId('box-cost').value)
+    cost: nullableNumber(byId('box-cost').value),
+    color: byId('box-color').value.toUpperCase()
   };
   await saveCatalog('box', id, payload);
 }
@@ -206,7 +210,8 @@ async function saveItem(event) {
     height: Number(byId('item-height').value),
     weightKg: nullableNumber(byId('item-weight').value),
     quantity: Number(byId('item-quantity').value),
-    allowRotation: byId('item-rotation').checked
+    allowRotation: byId('item-rotation').checked,
+    color: byId('item-color').value.toUpperCase()
   };
   await saveCatalog('item', id, payload);
 }
@@ -359,7 +364,7 @@ function renderDetails() {
       <div class="item-table-wrap"><table class="item-table">
         <thead><tr><th>商品</th><th>坐标 X / Y / Z</th><th>最终尺寸 L × W × H</th><th>原始尺寸</th><th>旋转</th><th>重量</th></tr></thead>
         <tbody>${box.items.map(item => `<tr>
-          <td><span class="item-name-cell"><i class="legend-swatch" style="background:${colorFor(item.itemTypeId)}"></i>${escapeHtml(item.name)} #${item.sequence}</span></td>
+          <td><span class="item-name-cell"><i class="legend-swatch" style="background:${itemColor(item)}"></i>${escapeHtml(item.name)} #${item.sequence}</span></td>
           <td>${item.x} / ${item.y} / ${item.z}</td>
           <td>${item.length} × ${item.width} × ${item.height}</td>
           <td>${item.originalLength} × ${item.originalWidth} × ${item.originalHeight}</td>
@@ -421,11 +426,12 @@ function loadBoxScene(index) {
 
   shellGroup = new THREE.Group();
   const shellGeometry = new THREE.BoxGeometry(box.length, box.height, box.width);
-  const shellMaterial = new THREE.MeshPhysicalMaterial({ color: 0x9ccba8, transparent: true, opacity: .075, roughness: .15, metalness: 0, side: THREE.DoubleSide, depthWrite: false });
+  const boxColor = safeColor(box.color, '#4E8B6A');
+  const shellMaterial = new THREE.MeshPhysicalMaterial({ color: boxColor, transparent: true, opacity: .1, roughness: .15, metalness: 0, side: THREE.DoubleSide, depthWrite: false });
   const shell = new THREE.Mesh(shellGeometry, shellMaterial);
   shell.position.set(0, box.height / 2, 0);
   shellGroup.add(shell);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(shellGeometry), new THREE.LineBasicMaterial({ color: 0xb9d7c0, transparent: true, opacity: .9 }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(shellGeometry), new THREE.LineBasicMaterial({ color: boxColor, transparent: true, opacity: 1 }));
   edges.position.copy(shell.position);
   shellGroup.add(edges);
   shellGroup.visible = state.shellVisible;
@@ -442,7 +448,7 @@ function loadBoxScene(index) {
 
   packedBox.items.forEach(item => {
     const geometry = new THREE.BoxGeometry(item.length * .985, item.height * .985, item.width * .985);
-    const color = colorFor(item.itemTypeId);
+    const color = itemColor(item);
     const material = new THREE.MeshStandardMaterial({ color, roughness: .55, metalness: .02, transparent: true, opacity: .93 });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
@@ -497,7 +503,7 @@ function renderLegend(packedBox) {
   const groups = [...new Map(packedBox.items.map(item => [item.itemTypeId, item])).values()];
   byId('item-legend').innerHTML = groups.map(item => {
     const count = packedBox.items.filter(candidate => candidate.itemTypeId === item.itemTypeId).length;
-    return `<div class="legend-row"><i class="legend-swatch" style="background:${colorFor(item.itemTypeId)}"></i><span>${escapeHtml(item.name)}</span><small>× ${count}</small></div>`;
+    return `<div class="legend-row"><i class="legend-swatch" style="background:${itemColor(item)}"></i><span>${escapeHtml(item.name)}</span><small>× ${count}</small></div>`;
   }).join('');
 }
 
@@ -643,9 +649,24 @@ function exportResult() {
 }
 
 function colorFor(id) {
+  const configured = state.items.find(item => item.id === id)?.color;
+  if (configured) return safeColor(configured, '#60A5FA');
   let hash = 0;
   for (const char of id) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-  return palette[Math.abs(hash) % palette.length];
+  return itemPalette[Math.abs(hash) % itemPalette.length];
+}
+
+function itemColor(item) {
+  return safeColor(item?.color, colorFor(item?.itemTypeId || item?.id || 'fallback'));
+}
+
+function safeColor(value, fallback) {
+  return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toUpperCase() : fallback;
+}
+
+function nextAvailableColor(records, colors) {
+  const used = new Set(records.map(record => safeColor(record.color, '').toUpperCase()).filter(Boolean));
+  return colors.find(color => !used.has(color)) || colors[records.length % colors.length];
 }
 
 function formatVolume(mm3) {
