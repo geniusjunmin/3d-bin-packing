@@ -8,8 +8,14 @@
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="benchmarks\**\*.cs" />
+    <Compile Remove="tools\**\*.cs" />
     <Content Remove="tests\**\*" />
+    <Content Remove="benchmarks\**\*" />
+    <Content Remove="tools\**\*" />
     <None Remove="tests\**\*" />
+    <None Remove="benchmarks\**\*" />
+    <None Remove="tools\**\*" />
   </ItemGroup>
 
 </Project>

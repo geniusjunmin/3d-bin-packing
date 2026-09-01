@@ -1,0 +1,29 @@
+{
+  "Runtime": "9.0.15",
+  "OperatingSystem": "Microsoft Windows NT 10.0.26100.0",
+  "RecordedAtUtc": "2026-09-01T15:43:31.5391125+00:00",
+  "Results": [
+    {
+      "Scenario": "EmsWasteTrap",
+      "ItemCount": 30,
+      "CalculationTimeMs": 325.2903,
+      "PackedVolume": 139572000,
+      "UtilizationPercent": 58.155,
+      "BoxCount": 2,
+      "TotalBoxVolume": 240000000,
+      "UnpackedItemCount": 0,
+      "CandidateEvaluations": 244381,
+      "ApproximateAllocatedBytes": 166149640,
+      "FirstBoxPackedVolume": 93349000,
+      "FirstBoxUtilizationPercent": 77.79083333333334,
+      "FirstBoxPackedItemCount": 23
+    }
+  ],
+  "AverageUtilizationPercent": 58.155,
+  "P50CalculationTimeMs": 325.2903,
+  "P95CalculationTimeMs": 325.2903,
+  "TotalBoxCount": 2,
+  "TotalBoxVolume": 240000000,
+  "CandidateEvaluations": 244381,
+  "ApproximateAllocatedBytes": 166149640
+}

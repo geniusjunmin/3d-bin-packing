@@ -6,8 +6,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
+builder.Services.Configure<PackingAlgorithmOptions>(builder.Configuration.GetSection("PackingAlgorithm"));
 builder.Services.AddSingleton<CatalogStore>();
-builder.Services.AddSingleton<IPackingAlgorithm, ExtremePointPackingAlgorithm>();
+builder.Services.AddSingleton<IPackingAlgorithm, HybridPackingAlgorithm>();
 builder.Services.AddSingleton<BoxSelectionService>();
 builder.Services.AddSingleton<RandomOrderService>();
 

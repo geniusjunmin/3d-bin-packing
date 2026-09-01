@@ -3,8 +3,19 @@ using BinPacking.Web.Models;
 
 namespace BinPacking.Web.Services;
 
-public sealed class BoxSelectionService(IPackingAlgorithm algorithm, CatalogStore store)
+public sealed class BoxSelectionService
 {
+    private readonly IPackingAlgorithm algorithm;
+    private readonly CatalogStore store;
+    private readonly BoxPlanOptimizer planOptimizer;
+
+    public BoxSelectionService(IPackingAlgorithm algorithm, CatalogStore store)
+    {
+        this.algorithm = algorithm;
+        this.store = store;
+        planOptimizer = new BoxPlanOptimizer(algorithm);
+    }
+
     public PackingResult Pack(PackOrderRequest request)
     {
         var itemTypes = store.GetItems().ToDictionary(item => item.Id);
@@ -38,7 +49,7 @@ public sealed class BoxSelectionService(IPackingAlgorithm algorithm, CatalogStor
             .Cast<List<PackingAttempt>>()
             .ToList();
 
-        var mixed = BuildMixedPlan(boxes, units);
+        var mixed = planOptimizer.BuildPlan(boxes, units);
         if (mixed is not null) plans.Add(mixed);
 
         var best = plans
@@ -65,30 +76,6 @@ public sealed class BoxSelectionService(IPackingAlgorithm algorithm, CatalogStor
             if (attempt.PackedItems.Count == 0) return null;
             plan.Add(attempt);
             var packedIds = attempt.PackedItems.Select(item => item.InstanceId).ToHashSet();
-            remaining.RemoveAll(item => packedIds.Contains(item.InstanceId));
-        }
-
-        return plan;
-    }
-
-    private List<PackingAttempt>? BuildMixedPlan(IReadOnlyList<BoxType> boxes, IReadOnlyList<PackingItemUnit> source)
-    {
-        var remaining = source.ToList();
-        var plan = new List<PackingAttempt>();
-
-        while (remaining.Count > 0)
-        {
-            var candidate = boxes
-                .Select(box => algorithm.Pack(box, remaining))
-                .Where(attempt => attempt.PackedItems.Count > 0)
-                .OrderByDescending(attempt => attempt.PackedItems.Count)
-                .ThenByDescending(attempt => attempt.PackedVolume)
-                .ThenBy(attempt => attempt.Box.Volume)
-                .FirstOrDefault();
-
-            if (candidate is null) return null;
-            plan.Add(candidate);
-            var packedIds = candidate.PackedItems.Select(item => item.InstanceId).ToHashSet();
             remaining.RemoveAll(item => packedIds.Contains(item.InstanceId));
         }
 

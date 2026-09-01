@@ -51,6 +51,23 @@ public sealed record PackingAttempt(
 {
     public long PackedVolume => PackedItems.Sum(item => item.Volume);
     public double PackedWeightKg => PackedItems.Sum(item => item.WeightKg);
+    public PackingDiagnostics Diagnostics { get; init; } = PackingDiagnostics.Empty;
+}
+
+public sealed record PackingDiagnostics
+{
+    public static PackingDiagnostics Empty { get; } = new();
+
+    public string AlgorithmName { get; init; } = "Unknown";
+    public string SearchMode { get; init; } = "Unknown";
+    public double CalculationTimeMs { get; init; }
+    public long CandidateEvaluations { get; init; }
+    public long BeamNodesExpanded { get; init; }
+    public long CacheHits { get; init; }
+    public int ExtremePointCount { get; init; }
+    public int EmsCount { get; init; }
+    public long ApproximateAllocatedBytes { get; init; }
+    public bool TimeBudgetReached { get; init; }
 }
 
 public sealed record PackedBox

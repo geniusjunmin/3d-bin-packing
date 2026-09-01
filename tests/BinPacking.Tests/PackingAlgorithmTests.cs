@@ -6,7 +6,7 @@ namespace BinPacking.Tests;
 
 public sealed class PackingAlgorithmTests
 {
-    private readonly ExtremePointPackingAlgorithm _algorithm = new();
+    private readonly HybridPackingAlgorithm _algorithm = new(PackingAlgorithmOptions.Balanced);
 
     [Fact]
     public void Pack_RotatesItem_WhenOriginalOrientationDoesNotFit()
