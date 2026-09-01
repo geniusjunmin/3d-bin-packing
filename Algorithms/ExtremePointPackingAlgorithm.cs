@@ -3,8 +3,9 @@ using BinPacking.Web.Models;
 namespace BinPacking.Web.Algorithms;
 
 /// <summary>
-/// Deterministic largest-first extreme-point heuristic. Coordinates use
-/// X=length, Y=width and Z=height. The algorithm is independent of rendering.
+/// Deterministic multi-strategy extreme-point heuristic with deferred-item
+/// backfill and projected coordinates. Coordinates use X=length, Y=width and
+/// Z=height. The algorithm is independent of rendering.
 /// </summary>
 public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
 {
@@ -16,84 +17,327 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
 
     public PackingAttempt Pack(BoxType box, IReadOnlyList<PackingItemUnit> items)
     {
+        var orderings = BuildOrderings(items);
+        var attempts = orderings
+            .Select(ordering => PackOrdered(box, ordering, PlacementPreference.LowestTop))
+            .Concat(orderings.Take(7)
+                .Select(ordering => PackOrdered(box, ordering, PlacementPreference.CompactEnvelope)))
+            .Concat(orderings.Take(7)
+                .Select(ordering => PackOrdered(box, ordering, PlacementPreference.MaximumContact)))
+            .Concat(Enumerable.Range(1, 5)
+                .Select(interval => PackAdaptive(box, items, interval, false, PlacementPreference.LowestTop)))
+            .Append(PackAdaptive(box, items, 3, true, PlacementPreference.MaximumContact));
+        return attempts
+            .OrderByDescending(attempt => attempt.PackedVolume)
+            .ThenByDescending(attempt => attempt.PackedItems.Count)
+            .ThenBy(attempt => attempt.PackedItems.Select(item => item.Z + item.Height).DefaultIfEmpty(0).Max())
+            .First();
+    }
+
+    private PackingAttempt PackOrdered(
+        BoxType box,
+        IReadOnlyList<PackingItemUnit> ordering,
+        PlacementPreference preference)
+    {
         var packed = new List<PackedItem>();
-        var unpacked = new List<PackingItemUnit>();
         var points = new List<Point3> { new(0, 0, 0) };
         var currentWeight = 0d;
 
-        var ordered = items
-            .OrderByDescending(item => item.Volume)
-            .ThenByDescending(item => Math.Max(item.Length, Math.Max(item.Width, item.Height)))
-            .ThenBy(item => item.ItemTypeId)
-            .ThenBy(item => item.Sequence)
-            .ToList();
+        var remaining = ordering.ToList();
 
-        foreach (var item in ordered)
+        while (remaining.Count > 0)
         {
-            if (box.MaxWeightKg is { } capacity && currentWeight + item.WeightKg > capacity + 1e-9)
-            {
-                unpacked.Add(item);
-                continue;
-            }
+            var deferred = new List<PackingItemUnit>();
+            var placedThisPass = false;
 
-            Candidate? best = null;
-            foreach (var point in points)
+            foreach (var item in remaining)
             {
-                foreach (var size in GetOrientations(item))
+                if (box.MaxWeightKg is { } capacity && currentWeight + item.WeightKg > capacity + 1e-9)
                 {
-                    if (!FitsInside(box, point, size) || OverlapsAny(point, size, packed))
-                    {
-                        continue;
-                    }
-
-                    var stability = MeasureStability(point, size, packed);
-                    if (!IsStable(stability))
-                    {
-                        continue;
-                    }
-
-                    var score = Score(point, size, packed, stability);
-                    if (best is null || score.CompareTo(best.Score) < 0)
-                    {
-                        best = new Candidate(point, size, score, stability);
-                    }
+                    deferred.Add(item);
+                    continue;
                 }
+
+                var best = FindBestCandidate(box, item, points, packed, false, preference);
+
+                if (best is null)
+                {
+                    deferred.Add(item);
+                    continue;
+                }
+
+                var placed = CreatePackedItem(item, best);
+
+                packed.Add(placed);
+                currentWeight += item.WeightKg;
+                placedThisPass = true;
+                AddExtremePoints(points, placed, box, packed);
             }
 
-            if (best is null)
+            if (!placedThisPass)
             {
-                unpacked.Add(item);
-                continue;
+                return new PackingAttempt(box, packed, deferred);
             }
 
-            var placed = new PackedItem
-            {
-                InstanceId = item.InstanceId,
-                ItemTypeId = item.ItemTypeId,
-                Name = item.Name,
-                Sequence = item.Sequence,
-                X = best.Point.X,
-                Y = best.Point.Y,
-                Z = best.Point.Z,
-                Length = best.Size.Length,
-                Width = best.Size.Width,
-                Height = best.Size.Height,
-                OriginalLength = item.Length,
-                OriginalWidth = item.Width,
-                OriginalHeight = item.Height,
-                Rotation = best.Size.Rotation,
-                WeightKg = item.WeightKg,
-                Color = item.Color,
-                SupportPercent = Math.Round(best.Stability.SupportRatio * 100, 2)
-            };
+            remaining = deferred;
+        }
 
+        return new PackingAttempt(box, packed, []);
+    }
+
+    private PackingAttempt PackAdaptive(
+        BoxType box,
+        IReadOnlyList<PackingItemUnit> items,
+        int constrainedInterval,
+        bool useProjectedPoints,
+        PlacementPreference preference)
+    {
+        var packed = new List<PackedItem>();
+        var points = new List<Point3> { new(0, 0, 0) };
+        var remaining = items.ToList();
+        var currentWeight = 0d;
+        var elevatedPlacements = 0;
+
+        while (remaining.Count > 0)
+        {
+            AdaptiveChoice? bestChoice = null;
+            foreach (var item in remaining
+                         .GroupBy(candidate => candidate.ItemTypeId)
+                         .Select(group => group.OrderBy(candidate => candidate.Sequence).First()))
+            {
+                if (box.MaxWeightKg is { } capacity && currentWeight + item.WeightKg > capacity + 1e-9)
+                    continue;
+
+                var candidate = FindBestCandidate(box, item, points, packed, useProjectedPoints, preference);
+                if (candidate is null) continue;
+
+                var choice = new AdaptiveChoice(item, candidate);
+                var preferConstrained = elevatedPlacements % constrainedInterval == 0;
+                if (bestChoice is null || CompareAdaptive(choice, bestChoice, preferConstrained) < 0)
+                    bestChoice = choice;
+            }
+
+            if (bestChoice is null) break;
+
+            var placed = CreatePackedItem(bestChoice.Item, bestChoice.Candidate);
             packed.Add(placed);
-            currentWeight += item.WeightKg;
+            currentWeight += bestChoice.Item.WeightKg;
+            if (bestChoice.Candidate.Point.Z > 0) elevatedPlacements++;
+            remaining.Remove(bestChoice.Item);
             AddExtremePoints(points, placed, box, packed);
         }
 
-        return new PackingAttempt(box, packed, unpacked);
+        return new PackingAttempt(box, packed, remaining);
     }
+
+    private static int CompareAdaptive(
+        AdaptiveChoice first,
+        AdaptiveChoice second,
+        bool preferConstrained)
+    {
+        var baseHeight = first.Candidate.Point.Z.CompareTo(second.Candidate.Point.Z);
+        if (baseHeight != 0) return baseHeight;
+
+        if (first.Candidate.Point.Z == 0)
+        {
+            var floorVolume = second.Item.Volume.CompareTo(first.Item.Volume);
+            if (floorVolume != 0) return floorVolume;
+        }
+        else if (preferConstrained)
+        {
+            var constrained = first.Item.AllowRotation.CompareTo(second.Item.AllowRotation);
+            if (constrained != 0) return constrained;
+        }
+
+        var volume = second.Item.Volume.CompareTo(first.Item.Volume);
+        if (volume != 0) return volume;
+
+        var candidateScore = first.Candidate.Score.CompareTo(second.Candidate.Score);
+        if (candidateScore != 0) return candidateScore;
+        return first.Item.ItemTypeId.CompareTo(second.Item.ItemTypeId);
+    }
+
+    private static Candidate? FindBestCandidate(
+        BoxType box,
+        PackingItemUnit item,
+        IReadOnlyList<Point3> points,
+        IReadOnlyList<PackedItem> packed,
+        bool useProjectedPoints,
+        PlacementPreference preference)
+    {
+        Candidate? best = null;
+        foreach (var size in GetOrientations(item))
+        foreach (var point in useProjectedPoints
+                     ? points.Concat(ProjectCandidatePoints(box, size, points, packed)).Distinct()
+                     : points)
+        {
+            if (!FitsInside(box, point, size) || OverlapsAny(point, size, packed)) continue;
+
+            var stability = MeasureStability(point, size, packed);
+            if (!IsStable(stability)) continue;
+
+            var score = Score(point, size, packed, stability, preference);
+            if (best is null || score.CompareTo(best.Score) < 0)
+                best = new Candidate(point, size, score, stability);
+        }
+
+        return best;
+    }
+
+    private static IEnumerable<Point3> ProjectCandidatePoints(
+        BoxType box,
+        OrientedSize size,
+        IReadOnlyList<Point3> points,
+        IReadOnlyList<PackedItem> packed)
+    {
+        foreach (var z in points.Select(point => point.Z).Distinct().Order())
+        {
+            if (z + size.Height > box.Height) continue;
+
+            var blockers = packed
+                .Where(item => z < item.Z + item.Height && z + size.Height > item.Z)
+                .ToArray();
+            var supporters = z == 0
+                ? []
+                : packed.Where(item => item.Z + item.Height == z).ToArray();
+            var xCoordinates = points.Where(point => point.Z == z).Select(point => point.X)
+                .Append(0)
+                .Append(box.Length - size.Length)
+                .Concat(blockers.SelectMany(item => new[] { item.X + item.Length, item.X - size.Length }))
+                .Concat(supporters.SelectMany(item => new[] { item.X, item.X + item.Length - size.Length }))
+                .Where(x => x >= 0 && x + size.Length <= box.Length)
+                .Distinct()
+                .Order()
+                .ToArray();
+            var yCoordinates = points.Where(point => point.Z == z).Select(point => point.Y)
+                .Append(0)
+                .Append(box.Width - size.Width)
+                .Concat(blockers.SelectMany(item => new[] { item.Y + item.Width, item.Y - size.Width }))
+                .Concat(supporters.SelectMany(item => new[] { item.Y, item.Y + item.Width - size.Width }))
+                .Where(y => y >= 0 && y + size.Width <= box.Width)
+                .Distinct()
+                .Order()
+                .ToArray();
+
+            foreach (var x in xCoordinates)
+            foreach (var y in yCoordinates)
+                yield return new Point3(x, y, z);
+        }
+    }
+
+    private static PackedItem CreatePackedItem(PackingItemUnit item, Candidate candidate) => new()
+    {
+        InstanceId = item.InstanceId,
+        ItemTypeId = item.ItemTypeId,
+        Name = item.Name,
+        Sequence = item.Sequence,
+        X = candidate.Point.X,
+        Y = candidate.Point.Y,
+        Z = candidate.Point.Z,
+        Length = candidate.Size.Length,
+        Width = candidate.Size.Width,
+        Height = candidate.Size.Height,
+        OriginalLength = item.Length,
+        OriginalWidth = item.Width,
+        OriginalHeight = item.Height,
+        Rotation = candidate.Size.Rotation,
+        WeightKg = item.WeightKg,
+        Color = item.Color,
+        SupportPercent = Math.Round(candidate.Stability.SupportRatio * 100, 2)
+    };
+
+    private static IReadOnlyList<IReadOnlyList<PackingItemUnit>> BuildOrderings(
+        IReadOnlyList<PackingItemUnit> items)
+    {
+        var tieBreaker = (PackingItemUnit item) => item.ItemTypeId;
+        var orderings = new List<IReadOnlyList<PackingItemUnit>>();
+        var signatures = new HashSet<string>(StringComparer.Ordinal);
+
+        void AddOrdering(IEnumerable<PackingItemUnit> source)
+        {
+            var ordering = source.ToArray();
+            var signature = string.Join(',', ordering.Select(item => item.InstanceId));
+            if (signatures.Add(signature)) orderings.Add(ordering);
+        }
+
+        AddOrdering(items.OrderByDescending(item => item.Volume)
+            .ThenByDescending(LongestSide)
+            .ThenBy(tieBreaker)
+            .ThenBy(item => item.Sequence));
+        AddOrdering(items.OrderBy(item => item.AllowRotation)
+            .ThenByDescending(item => item.Volume)
+            .ThenBy(tieBreaker)
+            .ThenBy(item => item.Sequence));
+        AddOrdering(items.OrderByDescending(item => (long)item.Length * item.Width)
+            .ThenByDescending(item => item.Volume)
+            .ThenBy(tieBreaker)
+            .ThenBy(item => item.Sequence));
+        AddOrdering(items.OrderByDescending(item => item.Height)
+            .ThenByDescending(item => item.Volume)
+            .ThenBy(tieBreaker)
+            .ThenBy(item => item.Sequence));
+        AddOrdering(items.OrderByDescending(ShortestSide)
+            .ThenByDescending(item => item.Volume)
+            .ThenBy(tieBreaker)
+            .ThenBy(item => item.Sequence));
+
+        var canonical = items
+            .OrderBy(item => item.ItemTypeId)
+            .ThenBy(item => item.Sequence)
+            .ToArray();
+        var groups = canonical.GroupBy(item => item.ItemTypeId).ToArray();
+        AddOrdering(RoundRobin(groups.OrderByDescending(group => group.First().Volume).ToArray()));
+        AddOrdering(RoundRobin(groups.OrderBy(group => group.First().AllowRotation)
+            .ThenByDescending(group => group.First().Volume)
+            .ToArray()));
+        var searchRounds = items.Count >= 20 ? 8 : 4;
+        for (var round = 0; round < searchRounds; round++)
+        {
+            var random = new Random(17_071 + round * 7_919);
+            var shuffledGroups = Shuffle(groups, random);
+            AddOrdering(shuffledGroups.SelectMany(group => group));
+            AddOrdering(RoundRobin(shuffledGroups));
+            AddOrdering(Shuffle(canonical, random));
+        }
+
+        return orderings;
+    }
+
+    private static IReadOnlyList<T> Shuffle<T>(IReadOnlyList<T> source, Random random)
+    {
+        var result = source.ToArray();
+        for (var index = result.Length - 1; index > 0; index--)
+        {
+            var other = random.Next(index + 1);
+            (result[index], result[other]) = (result[other], result[index]);
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<PackingItemUnit> RoundRobin(
+        IReadOnlyList<IGrouping<Guid, PackingItemUnit>> groups)
+    {
+        var queues = groups
+            .Select(group => new Queue<PackingItemUnit>(group.OrderBy(item => item.Sequence)))
+            .ToArray();
+        var result = new List<PackingItemUnit>(queues.Sum(queue => queue.Count));
+        while (queues.Any(queue => queue.Count > 0))
+        {
+            foreach (var queue in queues)
+            {
+                if (queue.Count > 0) result.Add(queue.Dequeue());
+            }
+        }
+
+        return result;
+    }
+
+    private static int LongestSide(PackingItemUnit item) =>
+        Math.Max(item.Length, Math.Max(item.Width, item.Height));
+
+    private static int ShortestSide(PackingItemUnit item) =>
+        Math.Min(item.Length, Math.Min(item.Width, item.Height));
 
     private static IReadOnlyList<OrientedSize> GetOrientations(PackingItemUnit item)
     {
@@ -132,7 +376,8 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
         Point3 point,
         OrientedSize size,
         IReadOnlyList<PackedItem> packed,
-        StabilityMetrics stability)
+        StabilityMetrics stability,
+        PlacementPreference preference)
     {
         var maxX = Math.Max(point.X + size.Length, packed.Count == 0 ? 0 : packed.Max(p => p.X + p.Length));
         var maxY = Math.Max(point.Y + size.Width, packed.Count == 0 ? 0 : packed.Max(p => p.Y + p.Width));
@@ -141,12 +386,19 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
         var contact = ContactArea(point, size, packed);
         var supportBasisPoints = (int)Math.Round(stability.SupportRatio * 10_000);
         var quadrantBasisPoints = (int)Math.Round(stability.MinimumQuadrantRatio * 10_000);
+        var top = point.Z + size.Height;
+        var (primary, secondary, tertiary) = preference switch
+        {
+            PlacementPreference.CompactEnvelope => (envelope, (long)top, -contact),
+            PlacementPreference.MaximumContact => (-contact, (long)top, envelope),
+            _ => ((long)top, envelope, -contact)
+        };
         return new PlacementScore(
             -supportBasisPoints,
             -quadrantBasisPoints,
-            point.Z + size.Height,
-            envelope,
-            -contact,
+            primary,
+            secondary,
+            tertiary,
             point.Z,
             point.Y,
             point.X);
@@ -296,11 +548,7 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
             .ToList();
 
         points.Clear();
-        points.AddRange(unique.Where(candidate =>
-            !unique.Any(other => other != candidate &&
-                                 other.X <= candidate.X &&
-                                 other.Y <= candidate.Y &&
-                                 other.Z <= candidate.Z)));
+        points.AddRange(unique.OrderBy(point => point.Z).ThenBy(point => point.Y).ThenBy(point => point.X));
     }
 
     private static bool IsStrictlyInside(Point3 point, PackedItem item) =>
@@ -313,6 +561,15 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
         OrientedSize Size,
         PlacementScore Score,
         StabilityMetrics Stability);
+
+    private sealed record AdaptiveChoice(PackingItemUnit Item, Candidate Candidate);
+
+    private enum PlacementPreference
+    {
+        LowestTop,
+        CompactEnvelope,
+        MaximumContact
+    }
 
     private readonly record struct StabilityMetrics(
         double SupportRatio,
@@ -327,9 +584,9 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
     private readonly record struct PlacementScore(
         int NegativeSupportBasisPoints,
         int NegativeQuadrantBasisPoints,
-        int Top,
-        long Envelope,
-        long NegativeContact,
+        long Primary,
+        long Secondary,
+        long Tertiary,
         int Z,
         int Y,
         int X) : IComparable<PlacementScore>
@@ -340,9 +597,9 @@ public sealed class ExtremePointPackingAlgorithm : IPackingAlgorithm
             {
                 NegativeSupportBasisPoints.CompareTo(other.NegativeSupportBasisPoints),
                 NegativeQuadrantBasisPoints.CompareTo(other.NegativeQuadrantBasisPoints),
-                Top.CompareTo(other.Top),
-                Envelope.CompareTo(other.Envelope),
-                NegativeContact.CompareTo(other.NegativeContact),
+                Primary.CompareTo(other.Primary),
+                Secondary.CompareTo(other.Secondary),
+                Tertiary.CompareTo(other.Tertiary),
                 Z.CompareTo(other.Z),
                 Y.CompareTo(other.Y),
                 X.CompareTo(other.X)

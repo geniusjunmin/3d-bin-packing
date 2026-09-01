@@ -23,7 +23,7 @@ dotnet test BinPacking.sln
 ## 目录
 
 - `Algorithms/IPackingAlgorithm.cs`：可替换算法契约
-- `Algorithms/ExtremePointPackingAlgorithm.cs`：Largest First + Extreme Point + Best Fit，并约束底面支撑率、四区受力与重心投影
+- `Algorithms/ExtremePointPackingAlgorithm.cs`：Largest First + Extreme Point + Best Fit，包含失败项回填、多排序/评分搜索、交叉坐标投影，并约束底面支撑率、四区受力与重心投影
 - `Services/BoxSelectionService.cs`：同箱型与混合箱型方案比较、多箱分配
 - `Services/CatalogStore.cs`：线程安全的 MVP 内存数据仓库（启动时载入示例数据）
 - `Controllers/`：箱型、商品与装箱 REST API

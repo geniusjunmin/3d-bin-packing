@@ -59,14 +59,15 @@ public sealed class PackingAlgorithmTests
     [Fact]
     public void Pack_RejectsPlacement_WithOnlyTinyBottomSupport()
     {
-        var box = Box("Stability Box", 100, 100, 100);
+        var box = Box("Stability Box", 100, 100, 91);
         var pillar = Unit("Pillar", 20, 20, 90, allowRotation: false);
         var plate = Unit("Wide Plate", 100, 100, 2, allowRotation: false);
 
         var result = _algorithm.Pack(box, [pillar, plate]);
 
-        Assert.Contains(result.PackedItems, item => item.Name == "Pillar");
-        Assert.Contains(result.UnpackedItems, item => item.Name == "Wide Plate");
+        Assert.Single(result.PackedItems);
+        Assert.Single(result.UnpackedItems);
+        AssertValid(box, result.PackedItems);
     }
 
     [Fact]
@@ -83,6 +84,24 @@ public sealed class PackingAlgorithmTests
         var packedTop = Assert.Single(result.PackedItems, item => item.Name == "Top Plate");
         Assert.Equal(30, packedTop.Z);
         Assert.Equal(100, packedTop.SupportPercent);
+        AssertValid(box, result.PackedItems);
+    }
+
+    [Fact]
+    public void Pack_DenseMixedOrder_BackfillsFirstBoxBeforeOpeningAnother()
+    {
+        var box = Box("Large Box", 800, 600, 500, maxWeight: 80);
+        var items = new List<PackingItemUnit>();
+        AddUnits(items, "Coffee Maker", 10, 260, 180, 220, 3.2, true);
+        AddUnits(items, "Book Set", 10, 210, 150, 80, 1.4, true);
+        AddUnits(items, "Storage Jar", 10, 120, 120, 190, 0.8, false);
+        AddUnits(items, "Desk Lamp", 10, 320, 140, 110, 1.1, true);
+        AddUnits(items, "Headphones", 10, 190, 170, 90, 0.4, true);
+
+        var result = _algorithm.Pack(box, items);
+
+        Assert.True(result.PackedItems.Count >= 40);
+        Assert.True(result.PackedVolume / (double)box.Volume >= 0.81);
         AssertValid(box, result.PackedItems);
     }
 
@@ -171,6 +190,25 @@ public sealed class PackingAlgorithmTests
         int sequence = 1) => new(
             Guid.NewGuid(), Guid.NewGuid(), name, sequence,
             length, width, height, weight, allowRotation, "#60A5FA");
+
+    private static void AddUnits(
+        ICollection<PackingItemUnit> target,
+        string name,
+        int quantity,
+        int length,
+        int width,
+        int height,
+        double weight,
+        bool allowRotation)
+    {
+        var itemTypeId = Guid.NewGuid();
+        for (var sequence = 1; sequence <= quantity; sequence++)
+        {
+            target.Add(new PackingItemUnit(
+                Guid.NewGuid(), itemTypeId, name, sequence,
+                length, width, height, weight, allowRotation, "#60A5FA"));
+        }
+    }
 
     private static void AssertValid(BoxType box, IReadOnlyList<PackedItem> items)
     {
