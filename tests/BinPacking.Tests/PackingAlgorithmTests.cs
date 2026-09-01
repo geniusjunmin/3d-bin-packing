@@ -57,6 +57,36 @@ public sealed class PackingAlgorithmTests
     }
 
     [Fact]
+    public void Pack_RejectsPlacement_WithOnlyTinyBottomSupport()
+    {
+        var box = Box("Stability Box", 100, 100, 100);
+        var pillar = Unit("Pillar", 20, 20, 90, allowRotation: false);
+        var plate = Unit("Wide Plate", 100, 100, 2, allowRotation: false);
+
+        var result = _algorithm.Pack(box, [pillar, plate]);
+
+        Assert.Contains(result.PackedItems, item => item.Name == "Pillar");
+        Assert.Contains(result.UnpackedItems, item => item.Name == "Wide Plate");
+    }
+
+    [Fact]
+    public void Pack_AllowsPlacement_FullySupportedByMultipleItems()
+    {
+        var box = Box("Bridge Box", 100, 100, 50);
+        var left = Unit("Left Support", 50, 100, 30, allowRotation: false);
+        var right = Unit("Right Support", 50, 100, 30, allowRotation: false);
+        var top = Unit("Top Plate", 100, 100, 10, allowRotation: false);
+
+        var result = _algorithm.Pack(box, [left, right, top]);
+
+        Assert.Empty(result.UnpackedItems);
+        var packedTop = Assert.Single(result.PackedItems, item => item.Name == "Top Plate");
+        Assert.Equal(30, packedTop.Z);
+        Assert.Equal(100, packedTop.SupportPercent);
+        AssertValid(box, result.PackedItems);
+    }
+
+    [Fact]
     public void BoxSelection_SplitsOrderAcrossMultipleBoxes()
     {
         var store = EmptyStore();
@@ -150,6 +180,7 @@ public sealed class PackingAlgorithmTests
             Assert.True(item.X + item.Length <= box.Length);
             Assert.True(item.Y + item.Width <= box.Width);
             Assert.True(item.Z + item.Height <= box.Height);
+            Assert.InRange(item.SupportPercent, 90, 100);
         }
 
         for (var first = 0; first < items.Count; first++)

@@ -362,13 +362,13 @@ function renderDetails() {
         <div class="metric"><small>UTILIZATION</small><strong class="utilization">${box.utilizationPercent.toFixed(2)}%</strong></div>
       </div>
       <div class="item-table-wrap"><table class="item-table">
-        <thead><tr><th>商品</th><th>坐标 X / Y / Z</th><th>最终尺寸 L × W × H</th><th>原始尺寸</th><th>旋转</th><th>重量</th></tr></thead>
+        <thead><tr><th>商品</th><th>坐标 X / Y / Z</th><th>最终尺寸 L × W × H</th><th>原始尺寸</th><th>旋转</th><th>底面支撑</th><th>重量</th></tr></thead>
         <tbody>${box.items.map(item => `<tr>
           <td><span class="item-name-cell"><i class="legend-swatch" style="background:${itemColor(item)}"></i>${escapeHtml(item.name)} #${item.sequence}</span></td>
           <td>${item.x} / ${item.y} / ${item.z}</td>
           <td>${item.length} × ${item.width} × ${item.height}</td>
           <td>${item.originalLength} × ${item.originalWidth} × ${item.originalHeight}</td>
-          <td>${item.rotation}</td><td>${item.weightKg.toFixed(2)} kg</td>
+          <td>${item.rotation}</td><td><span class="support-tag">${item.supportPercent.toFixed(1)}%</span></td><td>${item.weightKg.toFixed(2)} kg</td>
         </tr>`).join('')}</tbody>
       </table></div>
     </article>`).join('');
@@ -526,6 +526,7 @@ function inspectFromPointer(event) {
       <div class="data-cell"><small>POSITION Z</small><strong>${item.z} mm</strong></div>
       <div class="data-cell"><small>ROTATION</small><strong>${item.rotation}</strong></div>
       <div class="data-cell"><small>FINAL SIZE</small><strong>${item.length}×${item.width}×${item.height}</strong></div>
+      <div class="data-cell"><small>BASE SUPPORT</small><strong>${item.supportPercent.toFixed(1)}%</strong></div>
       <div class="data-cell"><small>WEIGHT</small><strong>${item.weightKg.toFixed(2)} kg</strong></div>
     </div>`;
 }

@@ -1,6 +1,6 @@
 # PackLab — 3D 自动装箱 MVP
 
-一个可直接运行的 ASP.NET Core Web 应用。后端实现实际三维尺寸、6 向旋转、碰撞/边界检查、多箱拆分与自动箱型选择；前端使用 Three.js 只负责渲染后端返回的坐标。
+一个可直接运行的 ASP.NET Core Web 应用。后端实现实际三维尺寸、6 向旋转、碰撞/边界检查、底面支撑与重心稳定性检查、多箱拆分及自动箱型选择；前端使用 Three.js 只负责渲染后端返回的坐标。
 
 ## 启动
 
@@ -23,7 +23,7 @@ dotnet test BinPacking.sln
 ## 目录
 
 - `Algorithms/IPackingAlgorithm.cs`：可替换算法契约
-- `Algorithms/ExtremePointPackingAlgorithm.cs`：Largest First + Extreme Point + Best Fit 实现
+- `Algorithms/ExtremePointPackingAlgorithm.cs`：Largest First + Extreme Point + Best Fit，并约束底面支撑率、四区受力与重心投影
 - `Services/BoxSelectionService.cs`：同箱型与混合箱型方案比较、多箱分配
 - `Services/CatalogStore.cs`：线程安全的 MVP 内存数据仓库（启动时载入示例数据）
 - `Controllers/`：箱型、商品与装箱 REST API

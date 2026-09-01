@@ -40,6 +40,7 @@ public sealed record PackedItem
     public required string Rotation { get; init; }
     public double WeightKg { get; init; }
     public required string Color { get; init; }
+    public double SupportPercent { get; init; }
     public long Volume => (long)Length * Width * Height;
 }
 

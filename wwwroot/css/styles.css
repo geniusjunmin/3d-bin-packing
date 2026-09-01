@@ -188,6 +188,7 @@ h1 em { color: var(--green); font-style: italic; }
 .item-table th { padding:12px 15px; text-align:left; color:#69756d; background:#f0f1eb; font:750 .625rem ui-monospace,monospace; letter-spacing:.06em; }
 .item-table td { padding:13px 15px; border-top:1px solid #e5e8e1; white-space:nowrap; }
 .item-name-cell { display:flex; align-items:center; gap:8px; font-weight:700; }
+.support-tag { color:var(--green); font-weight:800; }
 
 .toast { position:fixed; z-index:30; right:24px; bottom:24px; max-width:400px; padding:14px 18px; color:white; background:#18231c; border-left:4px solid var(--lime); box-shadow:0 12px 40px rgba(0,0,0,.25); transform:translateY(120px); opacity:0; transition:.25s; font-size:.875rem; }
 .toast.show { transform:translateY(0); opacity:1; }
