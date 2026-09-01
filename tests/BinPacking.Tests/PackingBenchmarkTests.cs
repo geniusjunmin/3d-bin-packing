@@ -43,7 +43,11 @@ public sealed class PackingBenchmarkTests
         }).ToArray();
 
         var baseline = new ExtremePointPackingAlgorithm().Pack(box, items);
-        var optimized = new HybridPackingAlgorithm(PackingAlgorithmOptions.Balanced).Pack(box, items);
+        // Quality assertions must not depend on the speed of the CI host. The
+        // production Balanced budget remains 250 ms; this fixture gives the
+        // bounded search enough time to complete the same depth on all runners.
+        var benchmarkOptions = PackingAlgorithmOptions.Balanced with { TimeBudgetMs = 10_000 };
+        var optimized = new HybridPackingAlgorithm(benchmarkOptions).Pack(box, items);
 
         Assert.True(optimized.PackedVolume > baseline.PackedVolume,
             $"Expected EMS score to beat {baseline.PackedVolume}, actual {optimized.PackedVolume}.");
