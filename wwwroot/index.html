@@ -13,10 +13,19 @@
       <span class="brand-mark"><i></i><i></i><i></i></span>
       <span><strong>PACKLAB</strong><small>3D PACKING STUDIO</small></span>
     </a>
-    <div class="topbar-meta">
-      <span class="status-dot"></span>
-      <span>Extreme Point Engine</span>
-      <span class="version">MVP · .NET 9</span>
+    <div class="topbar-tools">
+      <div class="font-settings" title="调整界面文字大小">
+        <span>字号</span>
+        <button id="font-decrease" type="button" aria-label="减小字号">A−</button>
+        <input id="font-scale" type="range" min="85" max="140" step="5" value="100" aria-label="界面字号">
+        <button id="font-increase" type="button" aria-label="增大字号">A+</button>
+        <output id="font-scale-label" for="font-scale">100%</output>
+      </div>
+      <div class="topbar-meta">
+        <span class="status-dot"></span>
+        <span>Extreme Point Engine</span>
+        <span class="version">MVP · .NET 9</span>
+      </div>
     </div>
   </header>
 

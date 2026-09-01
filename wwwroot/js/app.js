@@ -7,10 +7,12 @@ const state = {
   quantities: new Map(),
   result: null,
   activeBox: 0,
-  shellVisible: true
+  shellVisible: true,
+  fontScale: 1
 };
 
 const palette = ['#d8ef51', '#ff8c42', '#57c7d4', '#c084fc', '#fb7185', '#60a5fa', '#facc15', '#5ee0a0'];
+const fontScaleKey = 'packlab-font-scale';
 const $ = selector => document.querySelector(selector);
 const byId = id => document.getElementById(id);
 
@@ -29,12 +31,16 @@ const animation = { playing: false, elapsed: 0, lastTime: 0, duration: 650 };
 document.addEventListener('DOMContentLoaded', initialize);
 
 async function initialize() {
+  initializeFontSettings();
   bindEvents();
   initViewer();
   await refreshCatalogs();
 }
 
 function bindEvents() {
+  byId('font-scale').addEventListener('input', event => applyFontScale(Number(event.target.value), true));
+  byId('font-decrease').addEventListener('click', () => stepFontScale(-5));
+  byId('font-increase').addEventListener('click', () => stepFontScale(5));
   byId('new-box').addEventListener('click', () => openBoxForm());
   byId('new-item').addEventListener('click', () => openItemForm());
   byId('box-form').addEventListener('submit', saveBox);
@@ -56,6 +62,30 @@ function bindEvents() {
   byId('show-final').addEventListener('click', showFinalState);
   byId('export-json').addEventListener('click', exportResult);
   window.addEventListener('resize', resizeViewer);
+}
+
+function initializeFontSettings() {
+  const saved = Number(localStorage.getItem(fontScaleKey));
+  applyFontScale(Number.isFinite(saved) && saved >= 85 && saved <= 140 ? saved : 100, false);
+}
+
+function stepFontScale(change) {
+  applyFontScale(Number(byId('font-scale').value) + change, true);
+}
+
+function applyFontScale(percent, persist) {
+  const value = Math.min(140, Math.max(85, Math.round(percent / 5) * 5));
+  state.fontScale = value / 100;
+  document.documentElement.style.fontSize = `${16 * state.fontScale}px`;
+  byId('font-scale').value = String(value);
+  byId('font-scale-label').value = `${value}%`;
+  byId('font-scale-label').textContent = `${value}%`;
+  if (persist) localStorage.setItem(fontScaleKey, String(value));
+  itemMeshes.forEach(mesh => mesh.children.filter(child => child.isSprite).forEach(sprite => {
+    const baseWidth = sprite.userData.baseWidth;
+    if (baseWidth) sprite.scale.set(baseWidth * state.fontScale, baseWidth * state.fontScale * .21875, 1);
+  }));
+  requestAnimationFrame(resizeViewer);
 }
 
 async function refreshCatalogs() {
@@ -304,7 +334,7 @@ function renderSummary() {
     <div class="summary-card"><small>BOXES USED</small><strong>${summary.totalBoxCount} <em>箱</em></strong></div>
     <div class="summary-card accent"><small>SPACE UTILIZATION</small><strong>${summary.utilizationPercent.toFixed(1)} <em>%</em></strong></div>
     <div class="summary-card"><small>ITEM VOLUME</small><strong>${formatVolume(summary.totalItemVolumeMm3)} <em>cm³</em></strong></div>
-    <div class="summary-card"><small>BOX MIX</small><strong style="font-size:14px;line-height:1.45">${boxNames}</strong></div>`;
+    <div class="summary-card"><small>BOX MIX</small><strong class="box-mix-value">${boxNames}</strong></div>`;
 }
 
 function renderBoxTabs() {
@@ -440,23 +470,24 @@ function loadBoxScene(index) {
 function makeLabel(text, itemScale) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
-  canvas.height = 96;
+  canvas.height = 112;
   const context = canvas.getContext('2d');
   context.fillStyle = 'rgba(19,29,23,.82)';
-  context.fillRect(6, 6, 500, 84);
+  context.fillRect(6, 6, 500, 100);
   context.strokeStyle = 'rgba(203,237,69,.9)';
   context.lineWidth = 3;
-  context.strokeRect(6, 6, 500, 84);
+  context.strokeRect(6, 6, 500, 100);
   context.fillStyle = '#f7fff8';
-  context.font = '600 28px sans-serif';
+  context.font = '700 34px sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillText(text.slice(0, 28), 256, 50);
+  context.fillText(text.slice(0, 26), 256, 58);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
-  const width = Math.min(Math.max(itemScale * .65, 85), 180);
-  sprite.scale.set(width, width * .1875, 1);
+  const width = Math.min(Math.max(itemScale * .82, 120), 240);
+  sprite.userData.baseWidth = width;
+  sprite.scale.set(width * state.fontScale, width * state.fontScale * .21875, 1);
   sprite.position.set(0, 0, 0);
   sprite.renderOrder = 4;
   return sprite;
