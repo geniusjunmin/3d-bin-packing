@@ -120,6 +120,7 @@ public sealed class PackingAlgorithmTests
 
         Assert.True(result.Success, result.Error);
         Assert.Equal(3, result.Summary.TotalBoxCount);
+        Assert.True(result.Summary.CalculationTimeMs >= 0);
         Assert.All(result.Boxes, packedBox =>
         {
             Assert.Single(packedBox.Items);

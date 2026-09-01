@@ -32,12 +32,12 @@ dotnet run --project benchmarks/BinPacking.Benchmarks/BinPacking.Benchmarks.cspr
 
 - `Algorithms/IPackingAlgorithm.cs`：可替换算法契约
 - `Algorithms/ExtremePointPackingAlgorithm.cs`：保留并热点优化的兼容算法，也是 benchmark baseline 对照路径
-- `Algorithms/HybridPackingAlgorithm.cs`：Enhanced Extreme Point + EMS + adaptive waste/future-fit scoring + 按需有限 Beam Search/记忆化
+- `Algorithms/HybridPackingAlgorithm.cs`：Enhanced Extreme Point + EMS + adaptive waste/future-fit scoring + 按需有限 Beam Search/128-bit 记忆化 + repeated-SKU block + bounded remove/reinsert
 - `Algorithms/EmptySpaceManager.cs`：EMS difference、canonicalization、包含/重复/不可用空间 pruning 和数量上限
 - `Algorithms/ExtremePointManager.cs`：商品边缘/EMS 边界投影点生成与合法性 pruning
 - `Algorithms/PackingAlgorithmOptions.cs`：Fast、Balanced、Quality 模式和所有可调权重/预算
 - `Services/BoxSelectionService.cs`：同箱型与混合箱型方案比较、多箱分配
-- `Services/BoxPlanOptimizer.cs`：箱型预筛选、体积/重量 lower bound 和深度 2 的多箱前瞻
+- `Services/BoxPlanOptimizer.cs`：箱型预筛选、体积/重量/per-SKU grid capacity lower bound 和深度 2 的多箱前瞻
 - `Services/CatalogStore.cs`：线程安全的 MVP 内存数据仓库（启动时载入示例数据）
 - `Controllers/`：箱型、商品与装箱 REST API
 - `wwwroot/`：无构建步骤的管理界面、Three.js 透视图和装箱动画
@@ -52,6 +52,14 @@ dotnet run --project benchmarks/BinPacking.Benchmarks/BinPacking.Benchmarks.cspr
 - `Fast`：关闭 Beam Search，Top-K/EMS/极值点上限较小，适合低延迟请求。
 - `Balanced`：默认宽度 4、分支 4、深度 2、Beam 时间预算 250ms；容易订单走快速路径，困难状态才触发前瞻。
 - `Quality`：宽度 8、分支 5、深度 4、预算 1200ms；小于等于 6 件时将深度扩展到近似穷举范围。
+
+重复 SKU 默认在数量达到 6 时生成最多 8 个 block 候选，每块最多 24 件，并始终与普通单件候选共同评分；返回前拆回真实商品实例。LocalRepair 只在单箱剩余 1–4 件时触发，最多尝试 4 次、预算 180ms，只有装入件数或体积严格提升才接受。
+
+500/1000 件同质大单 benchmark：
+
+```powershell
+dotnet run --project benchmarks/BinPacking.Benchmarks/BinPacking.Benchmarks.csproj -c Release -- benchmarks/results/large.json hybrid --large
+```
 
 模式和权重可在 `appsettings.json` 的 `PackingAlgorithm` 节点调整。边界、碰撞、承重、重心支撑、最低 90% 底面支撑率和最低 70% 四象限支撑率始终是 hard constraints；后两个阈值只有显式配置才会改变。
 

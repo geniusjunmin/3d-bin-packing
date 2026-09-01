@@ -1,0 +1,44 @@
+{
+  "Runtime": "9.0.15",
+  "OperatingSystem": "Microsoft Windows NT 10.0.26100.0",
+  "RecordedAtUtc": "2026-09-01T16:26:26.5885688+00:00",
+  "Results": [
+    {
+      "Scenario": "Homogeneous",
+      "ItemCount": 500,
+      "CalculationTimeMs": 1750.1734999999999,
+      "PackedVolume": 480000000,
+      "UtilizationPercent": 100,
+      "BoxCount": 4,
+      "TotalBoxVolume": 480000000,
+      "UnpackedItemCount": 0,
+      "CandidateEvaluations": 192500,
+      "ApproximateAllocatedBytes": 5494216120,
+      "FirstBoxPackedVolume": 120000000,
+      "FirstBoxUtilizationPercent": 100,
+      "FirstBoxPackedItemCount": 125
+    },
+    {
+      "Scenario": "Homogeneous",
+      "ItemCount": 1000,
+      "CalculationTimeMs": 3611.9946,
+      "PackedVolume": 960000000,
+      "UtilizationPercent": 100,
+      "BoxCount": 8,
+      "TotalBoxVolume": 960000000,
+      "UnpackedItemCount": 0,
+      "CandidateEvaluations": 336746,
+      "ApproximateAllocatedBytes": 17890724704,
+      "FirstBoxPackedVolume": 120000000,
+      "FirstBoxUtilizationPercent": 100,
+      "FirstBoxPackedItemCount": 125
+    }
+  ],
+  "AverageUtilizationPercent": 100,
+  "P50CalculationTimeMs": 1750.1734999999999,
+  "P95CalculationTimeMs": 3611.9946,
+  "TotalBoxCount": 12,
+  "TotalBoxVolume": 1440000000,
+  "CandidateEvaluations": 529246,
+  "ApproximateAllocatedBytes": 23384940824
+}

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BinPacking.Web.Algorithms;
 using BinPacking.Web.Models;
 
@@ -18,6 +19,7 @@ public sealed class BoxSelectionService
 
     public PackingResult Pack(PackOrderRequest request)
     {
+        var stopwatch = Stopwatch.StartNew();
         var itemTypes = store.GetItems().ToDictionary(item => item.Id);
         var boxes = store.GetBoxes();
         var units = new List<PackingItemUnit>();
@@ -25,7 +27,7 @@ public sealed class BoxSelectionService
         foreach (var line in request.Items.Where(line => line.Quantity > 0))
         {
             if (!itemTypes.TryGetValue(line.ItemId, out var item))
-                return Failure($"商品 {line.ItemId} 不存在。", []);
+                return Failure($"商品 {line.ItemId} 不存在。", [], stopwatch.Elapsed.TotalMilliseconds);
 
             for (var sequence = 1; sequence <= line.Quantity; sequence++)
             {
@@ -36,12 +38,12 @@ public sealed class BoxSelectionService
             }
         }
 
-        if (units.Count == 0) return Failure("订单中没有可装箱的商品。", []);
-        if (boxes.Count == 0) return Failure("请先添加至少一种箱型。", units.Select(UnitName).ToArray());
+        if (units.Count == 0) return Failure("订单中没有可装箱的商品。", [], stopwatch.Elapsed.TotalMilliseconds);
+        if (boxes.Count == 0) return Failure("请先添加至少一种箱型。", units.Select(UnitName).ToArray(), stopwatch.Elapsed.TotalMilliseconds);
 
         var impossible = units.Where(unit => !boxes.Any(box => CanEverFit(unit, box))).ToList();
         if (impossible.Count > 0)
-            return Failure($"有 {impossible.Count} 件商品无法放入任何现有箱型。", impossible.Select(UnitName).ToArray());
+            return Failure($"有 {impossible.Count} 件商品无法放入任何现有箱型。", impossible.Select(UnitName).ToArray(), stopwatch.Elapsed.TotalMilliseconds);
 
         var plans = boxes
             .Select(box => BuildHomogeneousPlan(box, units))
@@ -60,9 +62,10 @@ public sealed class BoxSelectionService
             .FirstOrDefault();
 
         if (best is null)
-            return Failure("未能生成有效装箱方案，请检查箱型承重和商品尺寸。", units.Select(UnitName).ToArray());
+            return Failure("未能生成有效装箱方案，请检查箱型承重和商品尺寸。", units.Select(UnitName).ToArray(), stopwatch.Elapsed.TotalMilliseconds);
 
-        return Success(best, units);
+        stopwatch.Stop();
+        return Success(best, units, stopwatch.Elapsed.TotalMilliseconds);
     }
 
     private List<PackingAttempt>? BuildHomogeneousPlan(BoxType box, IReadOnlyList<PackingItemUnit> source)
@@ -101,7 +104,7 @@ public sealed class BoxSelectionService
         return boxVolume == 0 ? 0 : plan.Sum(attempt => attempt.PackedVolume) / (double)boxVolume;
     }
 
-    private static PackingResult Success(IReadOnlyList<PackingAttempt> plan, IReadOnlyList<PackingItemUnit> units)
+    private static PackingResult Success(IReadOnlyList<PackingAttempt> plan, IReadOnlyList<PackingItemUnit> units, double calculationTimeMs)
     {
         var packedBoxes = plan.Select((attempt, index) => new PackedBox
         {
@@ -125,6 +128,7 @@ public sealed class BoxSelectionService
                 TotalBoxVolumeMm3 = totalBoxVolume,
                 UtilizationPercent = Math.Round(totalItemVolume / (double)totalBoxVolume * 100, 2),
                 TotalCost = packedBoxes.Sum(item => item.Box.Cost ?? 0),
+                CalculationTimeMs = Math.Round(calculationTimeMs, 2),
                 BoxesByType = packedBoxes
                     .GroupBy(item => item.Box.Name)
                     .ToDictionary(group => group.Key, group => group.Count())
@@ -134,12 +138,13 @@ public sealed class BoxSelectionService
         };
     }
 
-    private static PackingResult Failure(string error, IReadOnlyList<string> unpacked) => new()
+    private static PackingResult Failure(string error, IReadOnlyList<string> unpacked, double calculationTimeMs) => new()
     {
         Success = false,
         Error = error,
         Summary = new PackingSummary
         {
+            CalculationTimeMs = Math.Round(calculationTimeMs, 2),
             BoxesByType = new Dictionary<string, int>()
         },
         Boxes = [],

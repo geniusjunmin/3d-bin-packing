@@ -5,6 +5,7 @@ using BinPacking.Web.Models;
 var outputPath = args.Length > 0 ? Path.GetFullPath(args[0]) : null;
 var algorithmName = args.Length > 1 ? args[1] : "baseline";
 var targetedOnly = args.Any(arg => arg.Equals("--targeted", StringComparison.OrdinalIgnoreCase));
+var largeOnly = args.Any(arg => arg.Equals("--large", StringComparison.OrdinalIgnoreCase));
 IPackingAlgorithm algorithm = algorithmName.Equals("hybrid", StringComparison.OrdinalIgnoreCase)
     ? new HybridPackingAlgorithm(PackingAlgorithmOptions.Balanced)
     : new ExtremePointPackingAlgorithm();
@@ -13,8 +14,8 @@ var results = new List<BenchmarkResult>();
 // Warm JIT and static caches outside the measurements.
 algorithm.Pack(BenchmarkCatalog.Box, BenchmarkCatalog.Create("Homogeneous", 6));
 
-var scenarioNames = targetedOnly ? new[] { "EmsWasteTrap" } : BenchmarkCatalog.ScenarioNames;
-var sizes = targetedOnly ? new[] { 30 } : BenchmarkCatalog.Sizes;
+var scenarioNames = targetedOnly ? new[] { "EmsWasteTrap" } : largeOnly ? new[] { "Homogeneous" } : BenchmarkCatalog.ScenarioNames;
+var sizes = targetedOnly ? new[] { 30 } : largeOnly ? new[] { 500, 1_000 } : BenchmarkCatalog.Sizes;
 foreach (var scenario in scenarioNames)
 foreach (var size in sizes)
 {
@@ -45,7 +46,11 @@ foreach (var size in sizes)
         attempts.Sum(attempt => attempt.Diagnostics.ApproximateAllocatedBytes),
         attempts.FirstOrDefault()?.PackedVolume ?? 0,
         attempts.Count == 0 ? 0 : attempts[0].PackedVolume * 100d / BenchmarkCatalog.Box.Volume,
-        attempts.FirstOrDefault()?.PackedItems.Count ?? 0));
+        attempts.FirstOrDefault()?.PackedItems.Count ?? 0,
+        attempts.Sum(attempt => attempt.Diagnostics.BlockPlacements),
+        attempts.Sum(attempt => attempt.Diagnostics.ItemsPackedAsBlocks),
+        attempts.Sum(attempt => attempt.Diagnostics.LocalRepairAttempts),
+        attempts.Sum(attempt => attempt.Diagnostics.LocalRepairSuccesses)));
     Console.WriteLine($"{scenario,-22} n={size,3} boxes={attempts.Count,2} util={results[^1].UtilizationPercent,6:F2}% ms={results[^1].CalculationTimeMs,9:F2}");
 }
 
@@ -95,7 +100,11 @@ internal sealed record BenchmarkResult(
     long ApproximateAllocatedBytes,
     long FirstBoxPackedVolume,
     double FirstBoxUtilizationPercent,
-    int FirstBoxPackedItemCount);
+    int FirstBoxPackedItemCount,
+    int BlockPlacements,
+    int ItemsPackedAsBlocks,
+    int LocalRepairAttempts,
+    int LocalRepairSuccesses);
 
 internal sealed record BenchmarkReport(
     string Runtime,

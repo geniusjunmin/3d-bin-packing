@@ -48,7 +48,7 @@ public sealed class BoxPlanOptimizer(IPackingAlgorithm algorithm)
                 foreach (var second in secondCandidates)
                 {
                     var afterSecond = RemovePacked(first.Remaining, second);
-                    var lowerBound = RemainingBoxLowerBound(afterSecond, sourceBoxes);
+                    var lowerBound = EstimateRemainingBoxLowerBound(afterSecond, sourceBoxes);
                     var minimumVolume = MinimumFeasibleBoxVolume(afterSecond, sourceBoxes);
                     var estimatedCount = plan.Count + 2 + lowerBound;
                     var estimatedVolume = plan.Sum(item => item.Box.Volume) + first.Attempt.Box.Volume + second.Box.Volume + lowerBound * minimumVolume;
@@ -93,14 +93,45 @@ public sealed class BoxPlanOptimizer(IPackingAlgorithm algorithm)
         return result;
     }
 
-    private static int RemainingBoxLowerBound(IReadOnlyList<PackingItemUnit> remaining, IReadOnlyList<BoxType> boxes)
+    public static int EstimateRemainingBoxLowerBound(IReadOnlyList<PackingItemUnit> remaining, IReadOnlyList<BoxType> boxes)
     {
         if (remaining.Count == 0) return 0;
         var maxVolume = boxes.Max(box => box.Volume);
         var volumeBound = (int)Math.Ceiling(remaining.Sum(item => item.Volume) / (double)maxVolume);
         var maxWeight = boxes.Max(WeightCapacity);
         var weightBound = double.IsPositiveInfinity(maxWeight) ? 0 : (int)Math.Ceiling(remaining.Sum(item => item.WeightKg) / maxWeight);
-        return Math.Max(1, Math.Max(volumeBound, weightBound));
+        var skuBound = 0;
+        foreach (var group in remaining.GroupBy(item => (item.Length, item.Width, item.Height, item.AllowRotation, item.WeightKg)))
+        {
+            var representative = group.First();
+            var maximumCapacity = boxes.Max(box => MaximumSkuCapacity(representative, box));
+            if (maximumCapacity <= 0) continue;
+            skuBound = Math.Max(skuBound, (int)Math.Ceiling(group.Count() / (double)maximumCapacity));
+        }
+        return Math.Max(1, Math.Max(volumeBound, Math.Max(weightBound, skuBound)));
+    }
+
+    private static int MaximumSkuCapacity(PackingItemUnit item, BoxType box)
+    {
+        if (!CanEverFit(item, box)) return 0;
+        Span<(int Length, int Width, int Height)> orientations = stackalloc (int, int, int)[6]
+        {
+            (item.Length, item.Width, item.Height), (item.Length, item.Height, item.Width),
+            (item.Width, item.Length, item.Height), (item.Width, item.Height, item.Length),
+            (item.Height, item.Length, item.Width), (item.Height, item.Width, item.Length)
+        };
+        var orientationCount = item.AllowRotation ? orientations.Length : 1;
+        long best = 0;
+        for (var index = 0; index < orientationCount; index++)
+        {
+            var orientation = orientations[index];
+            if (orientation.Length > box.Length || orientation.Width > box.Width || orientation.Height > box.Height) continue;
+            var capacity = (long)(box.Length / orientation.Length) * (box.Width / orientation.Width) * (box.Height / orientation.Height);
+            best = Math.Max(best, capacity);
+        }
+        if (item.WeightKg > 0 && box.MaxWeightKg is { } maximumWeight)
+            best = Math.Min(best, (long)Math.Floor(maximumWeight / item.WeightKg));
+        return (int)Math.Min(int.MaxValue, best);
     }
 
     private static long MinimumFeasibleBoxVolume(IReadOnlyList<PackingItemUnit> remaining, IReadOnlyList<BoxType> boxes)

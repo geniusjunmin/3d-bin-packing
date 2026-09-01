@@ -68,6 +68,10 @@ public sealed record PackingDiagnostics
     public int EmsCount { get; init; }
     public long ApproximateAllocatedBytes { get; init; }
     public bool TimeBudgetReached { get; init; }
+    public int BlockPlacements { get; init; }
+    public int ItemsPackedAsBlocks { get; init; }
+    public int LocalRepairAttempts { get; init; }
+    public int LocalRepairSuccesses { get; init; }
 }
 
 public sealed record PackedBox
@@ -87,6 +91,7 @@ public sealed record PackingSummary
     public long TotalBoxVolumeMm3 { get; init; }
     public double UtilizationPercent { get; init; }
     public decimal TotalCost { get; init; }
+    public double CalculationTimeMs { get; init; }
     public required IReadOnlyDictionary<string, int> BoxesByType { get; init; }
 }
 

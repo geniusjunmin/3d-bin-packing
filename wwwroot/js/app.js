@@ -9,7 +9,8 @@ const state = {
   activeBox: 0,
   shellVisible: true,
   labelsVisible: true,
-  fontScale: 1
+  fontScale: 1,
+  calculationTimeMs: 0
 };
 
 const itemPalette = ['#FF8C42', '#FB7185', '#60A5FA', '#57C7D4', '#C084FC', '#FACC15', '#5EE0A0', '#A78BFA', '#F97316', '#22C55E'];
@@ -29,6 +30,13 @@ let raycaster;
 let pointer;
 let currentBoxSize = 500;
 const animation = { playing: false, elapsed: 0, lastTime: 0, duration: 650 };
+const packingLoading = { startedAt: 0, elapsedTimer: null, stageTimer: null, hideTimer: null, stageIndex: 0 };
+const loadingStages = [
+  '正在读取箱型与商品尺寸…',
+  '正在尝试不同旋转与落点…',
+  '正在比较多种箱型组合…',
+  '正在整理最优装箱方案…'
+];
 
 document.addEventListener('DOMContentLoaded', initialize);
 
@@ -60,6 +68,10 @@ function bindEvents() {
   byId('toggle-shell').addEventListener('click', toggleShell);
   byId('toggle-labels').addEventListener('click', toggleLabels);
   byId('reset-camera').addEventListener('click', resetCamera);
+  byId('previous-box').addEventListener('click', () => selectBox(state.activeBox - 1));
+  byId('next-box').addEventListener('click', () => selectBox(state.activeBox + 1));
+  byId('box-tabs').addEventListener('wheel', scrollBoxTabs, { passive: false });
+  byId('box-tabs').addEventListener('keydown', handleBoxTabKeydown);
   byId('replay').addEventListener('click', replayAnimation);
   byId('play-pause').addEventListener('click', toggleAnimation);
   byId('show-final').addEventListener('click', showFinalState);
@@ -287,13 +299,14 @@ async function autoPack() {
 
 async function randomTest() {
   setBusy(true);
+  const requestStartedAt = performance.now();
   try {
     const response = await api('/api/packing/random', { method: 'POST' });
     state.items.forEach(item => state.quantities.set(item.id, 0));
     response.orderLines.forEach(line => state.quantities.set(line.itemId, line.quantity));
     renderOrderLines();
-    showResult(response.result);
-    toast(`随机订单已生成：${response.result.summary.totalItemCount} 件商品。`);
+    showResult(response.result, performance.now() - requestStartedAt);
+    toast(`随机订单已生成：${response.result.summary.totalItemCount} 件商品，计算耗时 ${formatCalculationTime(state.calculationTimeMs)}。`);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -303,10 +316,11 @@ async function randomTest() {
 
 async function runPacking(url, payload) {
   setBusy(true);
+  const requestStartedAt = performance.now();
   try {
     const result = await api(url, { method: 'POST', body: JSON.stringify(payload) });
-    showResult(result);
-    toast(`装箱完成，共使用 ${result.summary.totalBoxCount} 个箱子。`);
+    showResult(result, performance.now() - requestStartedAt);
+    toast(`装箱完成，共使用 ${result.summary.totalBoxCount} 个箱子，计算耗时 ${formatCalculationTime(state.calculationTimeMs)}。`);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -316,14 +330,54 @@ async function runPacking(url, payload) {
 
 function setBusy(busy) {
   [byId('auto-pack'), byId('random-test')].forEach(button => button.disabled = busy);
-  byId('auto-pack').innerHTML = busy ? 'CALCULATING…' : 'AUTO PACK <span>→</span>';
+  byId('auto-pack').innerHTML = busy ? 'CALCULATING <span class="button-spinner" aria-hidden="true"></span>' : 'AUTO PACK <span>→</span>';
+  document.querySelector('.order-panel').setAttribute('aria-busy', String(busy));
+  busy ? startPackingLoading() : stopPackingLoading();
 }
 
-function showResult(result) {
+function startPackingLoading() {
+  const loader = byId('packing-loader');
+  clearTimeout(packingLoading.hideTimer);
+  clearInterval(packingLoading.elapsedTimer);
+  clearInterval(packingLoading.stageTimer);
+  packingLoading.startedAt = performance.now();
+  packingLoading.stageIndex = 0;
+  byId('loading-stage').textContent = loadingStages[0];
+  byId('loading-elapsed').textContent = '0.0 秒';
+  loader.classList.remove('hidden');
+  loader.setAttribute('aria-busy', 'true');
+  requestAnimationFrame(() => loader.classList.add('show'));
+  packingLoading.elapsedTimer = setInterval(updateLoadingElapsed, 100);
+  packingLoading.stageTimer = setInterval(() => {
+    packingLoading.stageIndex = (packingLoading.stageIndex + 1) % loadingStages.length;
+    byId('loading-stage').textContent = loadingStages[packingLoading.stageIndex];
+  }, 1400);
+}
+
+function stopPackingLoading() {
+  const loader = byId('packing-loader');
+  clearInterval(packingLoading.elapsedTimer);
+  clearInterval(packingLoading.stageTimer);
+  updateLoadingElapsed();
+  loader.classList.remove('show');
+  loader.setAttribute('aria-busy', 'false');
+  packingLoading.hideTimer = setTimeout(() => loader.classList.add('hidden'), 220);
+}
+
+function updateLoadingElapsed() {
+  if (!packingLoading.startedAt) return;
+  byId('loading-elapsed').textContent = formatLiveDuration(performance.now() - packingLoading.startedAt);
+}
+
+function showResult(result, requestTimeMs = 0) {
   state.result = result;
   state.activeBox = 0;
+  const serverTimeMs = Number(result.summary.calculationTimeMs);
+  state.calculationTimeMs = Number.isFinite(serverTimeMs) && serverTimeMs >= 0 ? serverTimeMs : requestTimeMs;
   byId('empty-state').classList.add('hidden');
   byId('result-section').classList.remove('hidden');
+  byId('calculation-time').textContent = formatCalculationTime(state.calculationTimeMs);
+  byId('calculation-time').parentElement.title = `服务端规划耗时 ${formatCalculationTime(state.calculationTimeMs)}；本次请求往返 ${formatCalculationTime(requestTimeMs)}`;
   renderSummary();
   renderBoxTabs();
   renderDetails();
@@ -346,12 +400,48 @@ function renderSummary() {
 
 function renderBoxTabs() {
   byId('box-tabs').innerHTML = state.result.boxes.map((box, index) => `
-    <button class="box-tab ${index === state.activeBox ? 'active' : ''}" data-box-index="${index}">BOX ${String(box.number).padStart(2, '0')} · ${escapeHtml(box.box.name)}</button>`).join('');
+    <button class="box-tab ${index === state.activeBox ? 'active' : ''}" type="button" role="tab" aria-selected="${index === state.activeBox}" aria-controls="viewer" tabindex="${index === state.activeBox ? '0' : '-1'}" data-box-index="${index}">BOX ${String(box.number).padStart(2, '0')} · ${escapeHtml(box.box.name)}</button>`).join('');
   byId('box-tabs').querySelectorAll('[data-box-index]').forEach(button => button.addEventListener('click', () => {
-    state.activeBox = Number(button.dataset.boxIndex);
-    renderBoxTabs();
-    loadBoxScene(state.activeBox);
+    selectBox(Number(button.dataset.boxIndex));
   }));
+  const boxCount = state.result.boxes.length;
+  byId('previous-box').disabled = state.activeBox <= 0;
+  byId('next-box').disabled = state.activeBox >= boxCount - 1;
+  byId('box-position').textContent = `${state.activeBox + 1} / ${boxCount}`;
+  requestAnimationFrame(() => byId('box-tabs').querySelector('.box-tab.active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }));
+}
+
+function selectBox(index) {
+  const boxCount = state.result?.boxes.length ?? 0;
+  if (!boxCount) return;
+  const nextIndex = Math.max(0, Math.min(index, boxCount - 1));
+  state.activeBox = nextIndex;
+  renderBoxTabs();
+  loadBoxScene(nextIndex);
+}
+
+function scrollBoxTabs(event) {
+  const tabs = event.currentTarget;
+  if (tabs.scrollWidth <= tabs.clientWidth) return;
+  const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  const atStart = tabs.scrollLeft <= 0;
+  const atEnd = Math.ceil(tabs.scrollLeft + tabs.clientWidth) >= tabs.scrollWidth;
+  if ((delta < 0 && atStart) || (delta > 0 && atEnd)) return;
+  tabs.scrollLeft += delta;
+  event.preventDefault();
+}
+
+function handleBoxTabKeydown(event) {
+  const targets = {
+    ArrowLeft: state.activeBox - 1,
+    ArrowRight: state.activeBox + 1,
+    Home: 0,
+    End: (state.result?.boxes.length ?? 1) - 1
+  };
+  if (!(event.key in targets)) return;
+  event.preventDefault();
+  selectBox(targets[event.key]);
+  requestAnimationFrame(() => byId('box-tabs').querySelector('.box-tab.active')?.focus());
 }
 
 function renderDetails() {
@@ -687,6 +777,20 @@ function nextAvailableColor(records, colors) {
 
 function formatVolume(mm3) {
   return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(mm3 / 1000);
+}
+
+function formatCalculationTime(milliseconds) {
+  const value = Math.max(0, Number(milliseconds) || 0);
+  if (value < 1000) return `${value.toFixed(value < 10 ? 2 : 1)} 毫秒`;
+  if (value < 60000) return `${(value / 1000).toFixed(2)} 秒`;
+  const minutes = Math.floor(value / 60000);
+  return `${minutes} 分 ${((value % 60000) / 1000).toFixed(1)} 秒`;
+}
+
+function formatLiveDuration(milliseconds) {
+  const seconds = Math.max(0, milliseconds) / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} 秒`;
+  return `${Math.floor(seconds / 60)} 分 ${(seconds % 60).toFixed(0)} 秒`;
 }
 
 function nullableNumber(value) {

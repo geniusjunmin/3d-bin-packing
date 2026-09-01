@@ -46,7 +46,7 @@ public sealed class PackingBenchmarkTests
         // Quality assertions must not depend on the speed of the CI host. The
         // production Balanced budget remains 250 ms; this fixture gives the
         // bounded search enough time to complete the same depth on all runners.
-        var benchmarkOptions = PackingAlgorithmOptions.Balanced with { TimeBudgetMs = 10_000 };
+        var benchmarkOptions = PackingAlgorithmOptions.Balanced with { TimeBudgetMs = 10_000, EnableBlockPacking = false };
         var optimized = new HybridPackingAlgorithm(benchmarkOptions).Pack(box, items);
 
         Assert.True(optimized.PackedVolume > baseline.PackedVolume,
@@ -87,6 +87,72 @@ public sealed class PackingBenchmarkTests
         Assert.Equal(2, optimized.Count);
     }
 
+    [Fact]
+    public void Pack_RepeatedSkuBlockTrap_UsesFewerBoxesThanSingleItemSearch()
+    {
+        var box = new BoxType { Name = "Block trap", Length = 600, Width = 500, Height = 400 };
+        var specs = new[] { (220, 200, 150), (120, 180, 110), (100, 70, 130) };
+        var items = Enumerable.Range(0, 47).Select(index =>
+        {
+            var type = index < 47 * 2 / 3 ? 0 : 1 + index % 2;
+            var spec = specs[type];
+            return new PackingItemUnit(StableGuid(79_000 + index), StableGuid(79_100 + type), $"SKU {type}", index + 1,
+                spec.Item1, spec.Item2, spec.Item3, 1, true, "#60A5FA");
+        }).ToArray();
+        var options = PackingAlgorithmOptions.Fast with { EnableLegacyFallback = false, EnableLocalRepair = false };
+
+        var withoutBlocks = BuildSingleBoxTypePlan(new HybridPackingAlgorithm(options with { EnableBlockPacking = false }), box, items);
+        var withBlocks = BuildSingleBoxTypePlan(new HybridPackingAlgorithm(options with { EnableBlockPacking = true }), box, items);
+
+        Assert.Equal(4, withoutBlocks.Count);
+        Assert.Equal(3, withBlocks.Count);
+        Assert.True(withBlocks.Sum(attempt => attempt.Diagnostics.BlockPlacements) > 0);
+        Assert.All(withBlocks, attempt => AssertValidPlacements(box, attempt.PackedItems));
+    }
+
+    [Fact]
+    public void Pack_LocalRepairTrap_StrictlyImprovesPackedItemCount()
+    {
+        var box = new BoxType { Name = "Repair trap", Length = 600, Width = 500, Height = 400 };
+        var specs = new[] { (160, 170, 150), (260, 200, 150), (150, 150, 140), (150, 140, 170), (130, 90, 180) };
+        var items = Enumerable.Range(0, 20).Select(index =>
+        {
+            var spec = specs[index % specs.Length];
+            return new PackingItemUnit(StableGuid(30_000 + index), StableGuid(30_100 + index % specs.Length), $"SKU {index % specs.Length}", index + 1,
+                spec.Item1, spec.Item2, spec.Item3, 1, true, "#60A5FA");
+        }).ToArray();
+        var options = PackingAlgorithmOptions.Balanced with
+        {
+            EnableLegacyFallback = false, EnableBeamSearch = false, EnableBlockPacking = false,
+            EnableLocalRepair = false, TimeBudgetMs = 5_000
+        };
+
+        var withoutRepair = new HybridPackingAlgorithm(options).Pack(box, items);
+        var withRepair = new HybridPackingAlgorithm(options with
+        {
+            // Keep the quality assertion independent of CI host speed. Production
+            // still uses the configured 180 ms repair budget.
+            EnableLocalRepair = true, RepairAttempts = 6, RepairRemoveCount = 5, RepairTimeBudgetMs = 10_000
+        }).Pack(box, items);
+
+        Assert.True(withRepair.PackedItems.Count > withoutRepair.PackedItems.Count);
+        Assert.Equal(1, withRepair.Diagnostics.LocalRepairSuccesses);
+        AssertValidPlacements(box, withRepair.PackedItems);
+    }
+
+    [Fact]
+    public void BoxLowerBound_WhenSkuGridCapacityIsOne_UsesSkuCount()
+    {
+        var box = new BoxType { Name = "Grid bound", Length = 500, Width = 500, Height = 500 };
+        var type = StableGuid(40_100);
+        var items = Enumerable.Range(0, 10).Select(index => new PackingItemUnit(
+            StableGuid(40_000 + index), type, "Large cube", index + 1, 300, 300, 300, 1, true, "#60A5FA")).ToArray();
+
+        var lowerBound = BoxPlanOptimizer.EstimateRemainingBoxLowerBound(items, [box]);
+
+        Assert.Equal(10, lowerBound);
+    }
+
     private static List<PackingAttempt> BuildGreedyMixedPlan(IPackingAlgorithm algorithm, IReadOnlyList<BoxType> boxes, IReadOnlyList<PackingItemUnit> source)
     {
         var remaining = source.ToList();
@@ -104,6 +170,39 @@ public sealed class PackingBenchmarkTests
             remaining.RemoveAll(item => ids.Contains(item.InstanceId));
         }
         return plan;
+    }
+
+    private static List<PackingAttempt> BuildSingleBoxTypePlan(IPackingAlgorithm algorithm, BoxType box, IReadOnlyList<PackingItemUnit> source)
+    {
+        var remaining = source.ToList();
+        var plan = new List<PackingAttempt>();
+        while (remaining.Count > 0)
+        {
+            var attempt = algorithm.Pack(box, remaining);
+            Assert.NotEmpty(attempt.PackedItems);
+            plan.Add(attempt);
+            var ids = attempt.PackedItems.Select(item => item.InstanceId).ToHashSet();
+            remaining.RemoveAll(item => ids.Contains(item.InstanceId));
+        }
+        return plan;
+    }
+
+    private static void AssertValidPlacements(BoxType box, IReadOnlyList<PackedItem> items)
+    {
+        foreach (var item in items)
+        {
+            Assert.True(item.X >= 0 && item.Y >= 0 && item.Z >= 0);
+            Assert.True(item.X + item.Length <= box.Length && item.Y + item.Width <= box.Width && item.Z + item.Height <= box.Height);
+            Assert.InRange(item.SupportPercent, 90, 100);
+        }
+        for (var first = 0; first < items.Count; first++)
+        for (var second = first + 1; second < items.Count; second++)
+        {
+            var a = items[first]; var b = items[second];
+            Assert.False(a.X < b.X + b.Length && a.X + a.Length > b.X &&
+                         a.Y < b.Y + b.Width && a.Y + a.Width > b.Y &&
+                         a.Z < b.Z + b.Height && a.Z + a.Height > b.Z);
+        }
     }
 
     private static Guid StableGuid(int value)

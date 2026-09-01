@@ -30,6 +30,15 @@ public sealed record PackingAlgorithmOptions
     public int TimeBudgetMs { get; init; } = 250;
     public bool EnableBeamSearch { get; init; } = true;
     public bool EnableLegacyFallback { get; init; } = true;
+    public bool EnableBlockPacking { get; init; } = true;
+    public int MinimumRepeatedCount { get; init; } = 6;
+    public int MaxBlockCandidatesPerSku { get; init; } = 8;
+    public int MaxBlockItemCount { get; init; } = 24;
+    public double BlockRewardWeight { get; init; } = 0.25;
+    public bool EnableLocalRepair { get; init; } = true;
+    public int RepairRemoveCount { get; init; } = 5;
+    public int RepairAttempts { get; init; } = 4;
+    public int RepairTimeBudgetMs { get; init; } = 180;
 
     public static PackingAlgorithmOptions Fast { get; } = new()
     {
@@ -42,7 +51,8 @@ public sealed record PackingAlgorithmOptions
         LookaheadDepth = 1,
         TimeBudgetMs = 80,
         EnableBeamSearch = false,
-        EnableLegacyFallback = false
+        EnableLegacyFallback = false,
+        EnableLocalRepair = false
     };
 
     public static PackingAlgorithmOptions Balanced { get; } = new();

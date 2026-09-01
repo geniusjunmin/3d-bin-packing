@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0">
   <meta name="description" content="三维自动装箱与箱型选择系统">
   <title>PackLab · 3D 自动装箱</title>
-  <link rel="stylesheet" href="/css/styles.css?v=1.1.0">
+  <link rel="stylesheet" href="/css/styles.css?v=1.2.0">
 </head>
 <body>
   <header class="topbar">
@@ -113,7 +113,13 @@
           <p class="eyebrow">PACKING RESULT / 装箱结果</p>
           <h2>方案已计算完成</h2>
         </div>
-        <div class="result-badge"><span>✓</span> ALL ITEMS PACKED</div>
+        <div class="result-status">
+          <div class="result-badge"><span>✓</span> ALL ITEMS PACKED</div>
+          <div class="calculation-time" title="服务端完成整套装箱规划所用时间">
+            <small>CALCULATION TIME / 计算耗时</small>
+            <strong id="calculation-time">—</strong>
+          </div>
+        </div>
       </div>
 
       <div id="summary-cards" class="summary-cards"></div>
@@ -121,14 +127,19 @@
       <div class="visual-layout">
         <article class="viewer-panel">
           <div class="viewer-head">
-            <div id="box-tabs" class="box-tabs"></div>
+            <nav class="box-navigation" aria-label="箱子导航">
+              <button id="previous-box" class="box-nav-button" type="button" title="上一个箱子" aria-label="上一个箱子">‹</button>
+              <div id="box-tabs" class="box-tabs" role="tablist" aria-label="装箱结果"></div>
+              <span id="box-position" class="box-position" aria-live="polite">0 / 0</span>
+              <button id="next-box" class="box-nav-button" type="button" title="下一个箱子" aria-label="下一个箱子">›</button>
+            </nav>
             <div class="viewer-actions">
               <button id="toggle-shell" class="active" title="显示/隐藏箱体" aria-label="显示/隐藏箱体" aria-pressed="true">箱体</button>
               <button id="toggle-labels" class="active" title="显示/隐藏箱体名称" aria-label="显示/隐藏箱体名称" aria-pressed="true">箱体名称</button>
               <button id="reset-camera" title="重置视角">重置视角</button>
             </div>
           </div>
-          <div id="viewer" class="viewer">
+          <div id="viewer" class="viewer" role="tabpanel" aria-label="当前箱子 3D 视图" tabindex="0">
             <div class="viewer-hint">拖拽旋转 · 滚轮缩放 · 右键平移 · 点击商品查看</div>
           </div>
           <div class="animation-bar">
@@ -159,11 +170,30 @@
     </section>
   </main>
 
+  <div id="packing-loader" class="packing-loader hidden" role="status" aria-live="polite" aria-busy="false">
+    <div class="packing-loader-card">
+      <div class="packing-loader-visual" aria-hidden="true">
+        <div class="loader-crate">
+          <span class="loader-item loader-item-one"></span>
+          <span class="loader-item loader-item-two"></span>
+          <span class="loader-item loader-item-three"></span>
+          <i class="loader-scan"></i>
+        </div>
+      </div>
+      <p class="loading-kicker">3D PLACEMENT ENGINE</p>
+      <h2>正在生成装箱方案</h2>
+      <p id="loading-stage" class="loading-stage">正在读取箱型与商品尺寸…</p>
+      <div class="loading-progress" aria-hidden="true"><i></i></div>
+      <div class="loading-elapsed-row"><span>已计算</span><strong id="loading-elapsed">0.0 秒</strong></div>
+      <small>商品越多、箱型组合越复杂，计算时间可能越长</small>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status"></div>
 
   <script type="importmap">
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}
   </script>
-  <script type="module" src="/js/app.js?v=1.1.0"></script>
+  <script type="module" src="/js/app.js?v=1.2.0"></script>
 </body>
 </html>
